@@ -32,8 +32,155 @@ nav button.on{background:var(--red);border-color:var(--red)}
 @media(max-width:560px){.mon img{width:100px;height:100px}.card{min-width:130px}}
 @media(prefers-reduced-motion:reduce){.bar i{transition:none}}
 </style></head><body>
-<header><h1>Pocket Dex Battler</h1><nav><button data-t="battle" class="on">Battle</button><button data-t="dex">Pokédex</button><button data-t="shop">Shop</button><button data-t="inv">Inventory</button><button data-t="ach">Achievements</button></nav><button class="btn" id="mus" aria-pressed="true"></button><div class="stats" id="hud"></div></header>
+<header><h1>Pocket Dex Battler</h1><nav><button data-t="battle" class="on">Battle</button><button data-t="dex">Pokédex</button><button data-t="shop">Shop</button><button data-t="inv">Inventory</button><button data-t="mis">Missions</button><button data-t="ach">Achievements</button></nav><button class="btn" id="mus" aria-pressed="true"></button><div class="stats" id="hud"></div></header>
 <main id="m"></main><div id="toast" role="status"></div>
+<script id="save-io">
+// Save export/import — pure layer. No DOM, no globals from the main script.
+const SAVE_GAME='pokebattles',SAVE_VERSION=1,SAVE_CODE_PREFIX='PDB1-';
+function b64urlEncode(str){return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function b64urlDecode(str){let b=String(str).replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';return decodeURIComponent(escape(atob(b)))}
+const isObj=v=>!!v&&typeof v=='object'&&!Array.isArray(v);
+const isNum=v=>typeof v=='number'&&isFinite(v)&&v>=0;
+function summarize(state,saved){return{gems:state.gems,caught:Object.keys(state.caught).length,wins:state.wins,saved:saved}}
+function buildExportPayload(S){
+ const state={...S};delete state.bst;
+ const saved=new Date().toISOString();
+ const env={game:SAVE_GAME,v:SAVE_VERSION,saved,state};
+ return{code:SAVE_CODE_PREFIX+b64urlEncode(JSON.stringify(env)),fileJson:JSON.stringify(env,null,2),fileBase:'pokebattles-save-'+saved.slice(0,10),summary:summarize({gems:S.gems||0,caught:S.caught||{},wins:S.wins||0},saved)};
+}
+function validateSaveState(st){
+ if(!isObj(st)||!isObj(st.caught)||!isObj(st.ach))return null;
+ if(!isNum(st.gems)||!isNum(st.wins))return null;
+ if(Object.values(st.caught).some(c=>!isObj(c)))return null;
+ for(const k of['mgs','skin','bst','mis','items'])if(st[k]!==undefined&&!isObj(st[k]))return null;
+ if(st.boost!==undefined&&!isNum(st.boost))return null;
+ const o={...st};
+ for(const k of['se','crit','lead']){if(o[k]===undefined)o[k]=0;else if(!isNum(o[k]))return null}
+ return o;
+}
+function parseImportPayload(text){
+ text=String(text==null?'':text).trim();
+ if(!text)return{ok:false,error:'empty'};
+ let env;
+ if(text.startsWith(SAVE_CODE_PREFIX)){
+  try{env=JSON.parse(b64urlDecode(text.slice(SAVE_CODE_PREFIX.length).replace(/\s+/g,'')))}catch(e){return{ok:false,error:'cutoff'}}
+  if(!isObj(env))return{ok:false,error:'cutoff'};
+ }else{
+  try{env=JSON.parse(text)}catch(e){return{ok:false,error:'format'}}
+  if(!isObj(env))return{ok:false,error:'format'};
+ }
+ if(env.game!==SAVE_GAME)return{ok:false,error:'format'};
+ if(env.v!==SAVE_VERSION)return{ok:false,error:'version'};
+ const state=validateSaveState(env.state);
+ if(!state)return{ok:false,error:'shape'};
+ return{ok:true,state,summary:summarize(state,typeof env.saved=='string'?env.saved:null)};
+}
+// Mirrors the normal load path (S.skin/gems/bst/mgs defaults) so an imported save behaves exactly like one found in localStorage; bst is stripped from exports and refilled by scan().
+function applyImportState(prevS,imported){
+ const s=JSON.parse(JSON.stringify(imported));
+ s.skin=s.skin||{};s.gems=s.gems??0;s.bst=s.bst||{};s.mgs=s.mgs||{};s.pts=s.pts||0;
+ return s;
+}
+</script>
+<script id="missions">
+// Missions + reward path — pure layer (no DOM, no globals from the main script).
+const MIS_REWARD=20,MIS_PER_LEVEL=5,MIS_MAXLV=50,MIS_SLOTS=3,MIS_PRIZE_SKIN='home';
+const MT={
+ play2:{t:'Play 2 matches',s:'play',n:2},play4:{t:'Play 4 matches',s:'play',n:4},
+ win1:{t:'Win a match',s:'win',n:1},win3:{t:'Win 3 matches',s:'win',n:3},
+ kill5:{t:'Defeat 5 opposing Pokémon',s:'kills',n:5},kill12:{t:'Defeat 12 opposing Pokémon',s:'kills',n:12},
+ wild10:{t:'Defeat 10 wild Pokémon',s:'wild',n:10},wild25:{t:'Defeat 25 wild Pokémon',s:'wild',n:25},
+ pts30:{t:'Score 30 points',s:'pts',n:30},pts80:{t:'Score 80 points',s:'pts',n:80},
+ buy1:{t:'Buy a Pokémon or a skin in the Shop',s:'buy',n:1}};
+// Gems for reaching a path level: every level 5, every 5th level 10, every 25th 25 (the highest applicable one, not stacked); level 50 is the special prize (50 gems + a 3D skin).
+const misLevel=done=>Math.min(MIS_MAXLV,Math.floor(done/MIS_PER_LEVEL));
+const misLevelGems=l=>l>=MIS_MAXLV?50:l%25==0?25:l%5==0?10:5;
+function misPick(excl,rnd){
+ const ids=Object.keys(MT),bad=new Set(excl.map(id=>MT[id]&&MT[id].s));
+ let c=ids.filter(id=>!excl.includes(id)&&!bad.has(MT[id].s));
+ if(!c.length)c=ids.filter(id=>!excl.includes(id));
+ if(!c.length)c=ids;
+ return{id:c[Math.floor(rnd()*c.length)%c.length],p:0};
+}
+function misNormalize(m,rnd){
+ rnd=rnd||Math.random;
+ if(!m||typeof m!='object'||Array.isArray(m))m={};
+ m.done=Number.isFinite(m.done)&&m.done>0?Math.floor(m.done):0;
+ m.prize=m.prize===1||m.prize===2?m.prize:0;
+ m.next=Number.isFinite(m.next)&&m.next>0?m.next:0;
+ m.last=Number.isFinite(m.last)&&m.last>0?Math.min(MIS_MAXLV,Math.floor(m.last)):0;
+ const seen=new Set();
+ m.act=(Array.isArray(m.act)?m.act:[]).filter(a=>a&&typeof a=='object'&&MT[a.id]&&!seen.has(a.id)&&seen.add(a.id)).slice(0,MIS_SLOTS)
+  .map(a=>({id:a.id,p:Math.max(0,Math.min(MT[a.id].n,Math.floor(+a.p)||0))}));
+ while(m.act.length<MIS_SLOTS)m.act.push(misPick(m.act.map(a=>a.id),rnd));
+ return m;
+}
+// ev example: {play:1,win:1,kills:3,pts:42,wild:9,buy:1}. Returns the ids of missions that just became complete.
+function misEvent(m,ev){
+ const done=[];
+ m.act.forEach(a=>{const t=MT[a.id],add=Math.floor(+ev[t.s])||0;
+  if(add>0&&a.p<t.n){a.p=Math.min(t.n,a.p+add);if(a.p>=t.n)done.push(a.id)}});
+ return done;
+}
+const MIS_PERIOD=5*24*3600*1000;
+// The reward path restarts every 5 days: levels go back to the start. The missions on the board are untouched, and a level-50 prize that hasn't been picked yet is kept.
+function misReset(m,now){
+ if(!Number.isFinite(now))return false;
+ if(!(m.next>0)||m.next-now>MIS_PERIOD){m.next=now+MIS_PERIOD;return false}
+ if(now<m.next)return false;
+ m.next+=Math.ceil((now-m.next+1)/MIS_PERIOD)*MIS_PERIOD;
+ m.last=misLevel(m.done);m.done=0;if(m.prize===2)m.prize=0;
+ return true;
+}
+function misTimeLeft(ms){
+ if(!(ms>0))return 'moments';
+ const d=Math.floor(ms/864e5),h=Math.floor(ms%864e5/36e5),mi=Math.floor(ms%36e5/6e4);
+ return d>0?d+'d '+h+'h':h>0?h+'h '+mi+'m':Math.max(1,mi)+'m';
+}
+const misReady=m=>m.act.filter(a=>a.p>=MT[a.id].n).length+(m.prize===1?1:0);
+// Claims a finished mission. Returns null if it isn't finished, else {gems,mission,level,levelGems,prize}; the caller adds `gems` to the player's balance.
+function misClaim(m,i,rnd){
+ rnd=rnd||Math.random;
+ const a=m.act[i],t=a&&MT[a.id];
+ if(!t||a.p<t.n)return null;
+ m.done++;
+ let gems=MIS_REWARD,level=null,levelGems=0,prize=false;
+ if(m.done%MIS_PER_LEVEL==0&&m.done/MIS_PER_LEVEL<=MIS_MAXLV){
+  level=m.done/MIS_PER_LEVEL;levelGems=misLevelGems(level);gems+=levelGems;
+  if(level==MIS_MAXLV&&m.prize===0){m.prize=1;prize=true}}
+ m.act[i]=misPick(m.act.filter((_,j)=>j!=i).map(x=>x.id).concat(a.id),rnd);
+ return{gems,mission:MIS_REWARD,level,levelGems,prize};
+}
+// Level-50 prize: the chosen Pokémon gets the 3D skin. Returns true on success.
+function misClaimPrize(S,id){
+ const m=S&&S.mis,c=S&&S.caught&&S.caught[id];
+ if(!m||m.prize!==1||!c)return false;
+ const sk=Array.isArray(c.sk)?c.sk:[];
+ if(sk.includes(MIS_PRIZE_SKIN))return false;
+ c.sk=[...sk,MIS_PRIZE_SKIN];m.prize=2;
+ return true;
+}
+</script>
+<script id="items">
+// Items — pure layer. S.items = {itemKey: count owned}; S.boost = battles of x2 battle points left.
+const ITEMS={boost:{n:'Points Booster',d:'Doubles the battle points you earn for 105 battles.',battles:105,ico:'⚡'}};
+const itemCount=(S,k)=>Math.max(0,Math.floor(+(S.items&&S.items[k]))||0);
+const boostLeft=S=>Math.max(0,Math.floor(+S.boost)||0);
+// Earned by playing: each win has a BOOST_DROP chance to drop a Points Booster into S.items (rnd defaults to Math.random).
+const BOOST_DROP=.25;
+function boostDrop(S,rnd){if(!((rnd||Math.random)()<BOOST_DROP))return false;
+ S.items=S.items&&typeof S.items=='object'&&!Array.isArray(S.items)?S.items:{};S.items.boost=itemCount(S,'boost')+1;return true}
+// Using a booster while one is running adds its battles on top, so nothing is wasted.
+function itemUse(S,k){const it=ITEMS[k];if(!it||itemCount(S,k)<1)return false;
+ S.items[k]=itemCount(S,k)-1;if(k=='boost')S.boost=boostLeft(S)+it.battles;return true}
+// Call once per finished battle with the points earned. Returns the points to award (x2 while boosted) and uses up one boosted battle.
+function boostBattle(S,bp){const on=boostLeft(S)>0;if(on)S.boost=boostLeft(S)-1;return{bp:on?bp*2:bp,boosted:on,left:boostLeft(S)}}
+// Potion: every match you carry one. Press I to heal 25% of your max health, then it recharges for 15 seconds. f.pot = seconds of cooldown left.
+const POTION={n:'Potion',heal:.25,cd:15,ico:'🧪',d:'You get one in every match. Press I to heal 25% of your health. Then it recharges for 15 seconds.'};
+function potionUse(f){if(!f||f.dead||!(f.max>0)||(f.pot||0)>0||f.hp>=f.max)return 0;
+ const h=Math.min(f.max-f.hp,f.max*POTION.heal);f.hp+=h;f.pot=POTION.cd;return h}
+const potionTick=(f,dt)=>{if(f.pot>0)f.pot=Math.max(0,f.pot-dt)};
+</script>
 <script>
 const API='https://pokeapi.co/api/v2/',SP='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/',TOTAL=1025;
 const X={normal:{rock:.5,steel:.5,ghost:0},fire:{fire:.5,water:.5,grass:2,ice:2,bug:2,rock:.5,dragon:.5,steel:2},water:{fire:2,water:.5,grass:.5,ground:2,rock:2,dragon:.5},electric:{water:2,electric:.5,grass:.5,ground:0,flying:2,dragon:.5},grass:{fire:.5,water:2,grass:.5,poison:.5,ground:2,flying:.5,bug:.5,rock:2,dragon:.5,steel:.5},ice:{fire:.5,water:.5,grass:2,ice:.5,ground:2,flying:2,dragon:2,steel:.5},fighting:{normal:2,ice:2,poison:.5,flying:.5,psychic:.5,bug:.5,rock:2,ghost:0,dark:2,steel:2,fairy:.5},poison:{grass:2,poison:.5,ground:.5,rock:.5,ghost:.5,steel:0,fairy:2},ground:{fire:2,electric:2,grass:.5,poison:2,flying:0,bug:.5,rock:2,steel:2},flying:{electric:.5,grass:2,fighting:2,bug:2,rock:.5,steel:.5},psychic:{fighting:2,poison:2,psychic:.5,dark:0,steel:.5},bug:{fire:.5,grass:2,fighting:.5,poison:.5,flying:.5,psychic:2,ghost:.5,dark:2,steel:.5,fairy:.5},rock:{fire:2,ice:2,fighting:.5,ground:.5,flying:2,bug:2,steel:.5},ghost:{normal:0,psychic:2,ghost:2,dark:.5},dragon:{dragon:2,steel:.5,fairy:0},dark:{fighting:.5,psychic:2,ghost:2,dark:.5,fairy:.5},steel:{fire:.5,water:.5,electric:.5,ice:2,rock:2,steel:.5,fairy:2},fairy:{fire:.5,fighting:2,poison:.5,dragon:2,dark:2,steel:.5}};
@@ -117,10 +264,10 @@ function mk(p,L){const f=(b,h)=>Math.floor(2*b*L/100)+(h?L+10:5),st={hp:f(p.b.hp
  const t=p.types;return{p,L,st,max:st.hp,hp:st.hp,heals:3,mv:[{n:cap(t[0])+' Jab',t:t[0],pow:50,acc:100},{n:cap(t[0])+' Blast',t:t[0],pow:90,acc:80},{n:t[1]?cap(t[1])+' Wave':'Body Slam',t:t[1]||'normal',pow:70,acc:95}]}}
 const tl=()=>Math.min(60,10+Math.floor(S.wins/3));
 const log=t=>{const l=$('#log');if(l){l.innerHTML+='<div>'+t+'</div>';l.scrollTop=1e5}};
-function hud(){$('#hud').textContent=`Owned ${nCaught()}/${TOTAL+Object.keys(S.mgs).length} · Wins ${S.wins} · Gems 💎 ${S.gems} · Trainer Lv ${tl()}`+(scanning?` · Scanning rarities ${Object.keys(S.bst).length}/${TOTAL-LEG.size}`:'')}
+function hud(){const mb=document.querySelector('nav [data-t="mis"]');if(mb){const n=misReady(mis());mb.textContent='Missions'+(n?' ('+n+')':'')}$('#hud').textContent=`Owned ${nCaught()}/${TOTAL+Object.keys(S.mgs).length} · Wins ${S.wins} · Gems 💎 ${S.gems} · Trainer Lv ${tl()}`+(boostLeft(S)>0?` · ×2 points (${boostLeft(S)})`:'')+(scanning?` · Scanning rarities ${Object.keys(S.bst).length}/${TOTAL-LEG.size}`:'')}
 function bars(){if(!B)return;for(const k of['me','foe']){const f=B[k];$('#'+k+'hp').style.width=(100*f.hp/f.max)+'%';$('#'+k+'n').textContent=`${f.hp}/${f.max} HP`}}
 function render(){hud();play(B||M?'battle':'menu');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));
- if(tab=='dex')return dex();if(tab=='ach')return achs();if(tab=='inv')return inv();if(tab=='shop')return shop();battleView()}
+ if(tab=='dex')return dex();if(tab=='ach')return achs();if(tab=='inv')return inv();if(tab=='mis')return missions();if(tab=='shop')return shop();battleView()}
 function achs(){$('#m').innerHTML=ACH.map(([n,d])=>`<div class="ach ${S.ach[n]?'on':''}"><div>${S.ach[n]?'★':'☆'}</div><div><b>${n}</b>${d}</div></div>`).join('')}
 function dexList(){const mgs=Object.keys(S.mgs).map(Number).sort(mgSort);if(MGF)return mgs;const mb={};mgs.forEach(m=>(mb[dn(m)]=mb[dn(m)]||[]).push(m));return Array.from({length:TOTAL},(_,k)=>k+1).flatMap(i=>[i,...(mb[i]||[])])}
 function skinBtn(key,l,k){const own=key=='classic'||has(SEL,key),on=key=='shiny'?k.sh:k.s==key;
@@ -129,8 +276,8 @@ function dex(){if(!SEL)SEL=S.lead;const ids=[];
  for(const i of dexList()){if(onlyCaught&&!S.caught[i])continue;if(RF>=0&&rar(i)!=RF)continue;ids.push(i)}
  const c=S.caught[SEL],k=mySkin(SEL),r=SEL?rar(SEL):-1;let panel='<div class="stats" style="margin-bottom:12px">Select a Pokémon to see its rarity, price and skins.</div>';
  if(SEL){const tag=r>=0?`<span style="color:${RC[r]};font-weight:800">${RN[r]}</span>`:'<span class="stats">scanning rarity...</span>';
-  panel=c?`<div class="panel">${img(SEL,k.s,k.sh,0,c.n)}<div><b>#${dn(SEL)} ${c.n}</b> ${tag}<div class="stats">${c.t.join(' / ')}</div><div class="ctl" style="margin-top:8px">${SKINS.map(([key,l])=>skinBtn(key,l,k)).join('')}${skinBtn('shiny','Shiny ✨',k)}<button class="btn" id="gk">🛒 Skins in the Shop</button></div></div></div>`
-  :`<div class="panel"><img src="${SP}${SEL}.png" style="filter:brightness(0) opacity(.5)" alt=""><div><b>#${dn(SEL)} ${NAMES[SEL]||'???'}</b> ${tag}<div style="margin-top:8px"><button class="btn" id="gs">🛒 Find in the Shop · 💎 ${r<0?'...':COST[r]}</button></div></div></div>`}
+  panel=c?`<div class="panel">${img(SEL,k.s,k.sh,0,c.n)}<div><b>#${dn(SEL)} ${c.n}</b> ${tag}<div class="stats">${c.t.join(' / ')}</div><div class="ctl" style="margin-top:8px">${SKINS.map(([key,l])=>skinBtn(key,l,k)).join('')}${skinBtn('shiny','Shiny ✨',k)}</div></div></div>`
+  :`<div class="panel"><img src="${SP}${SEL}.png" style="filter:brightness(0) opacity(.5)" alt=""><div><b>#${dn(SEL)} ${NAMES[SEL]||'???'}</b> ${tag}<div class="stats" style="margin-top:8px">Not in your collection yet · 💎 ${r<0?'...':COST[r]}</div></div></div>`}
  $('#m').innerHTML=panel+`<div class="ctl" style="margin-bottom:12px"><button class="btn" id="oc">${onlyCaught?'Show all':'Owned only'}</button><button class="btn ${MGF?'sel':''}" id="mgb">${MGF?'Show all':'Mega Pokémon only'}</button><select class="btn" id="rf" aria-label="Rarity filter"><option value="-1">All rarities</option>${RN.map((n,i)=>`<option value="${i}" ${RF==i?'selected':''}>${n} (💎${COST[i]})</option>`).join('')}</select></div><div class="grid">`+
  ids.map(i=>{const g=S.caught[i],q=mySkin(i),x=rar(i);return `<div class="cell ${g?'got':''} ${S.lead==i?'lead':''} ${SEL==i?'cur':''} ${S.mgs[i]?'mg':''}" data-i="${i}">${g?img(i,q.s,q.sh,0):`<img loading="lazy" src="${SP}${i}.png" alt="">`}<div>#${dn(i)}</div><div>${g?g.n:NAMES[i]||'???'}</div><div style="color:${x>=0?RC[x]:'inherit'}">${x>=0?(g?RN[x]:'💎'+COST[x]):''}</div></div>`}).join('')+'</div>'+(!ids.length?'<div class="stats">'+(MGF&&!Object.keys(S.mgs).length?'Mega Pokémon load from PokeAPI when you are online. Wait a few seconds, or reload the page.':'Nothing matches these filters.')+'</div>':'');
  $('#oc').onclick=()=>{onlyCaught=!onlyCaught;dex()};$('#mgb').onclick=()=>{MGF=!MGF;dex()};$('#rf').onchange=e=>{RF=+e.target.value;dex()};
@@ -138,8 +285,7 @@ function dex(){if(!SEL)SEL=S.lead;const ids=[];
  document.querySelectorAll('[data-k]').forEach(x=>x.onclick=()=>{const key=x.dataset.k,own=key=='classic'||has(SEL,key),q=mySkin(SEL);
   if(!own)return;
   S.skin[SEL]=key=='shiny'?{s:q.s,sh:own&&q.sh?0:1}:{s:key,sh:q.sh};save();hud();dex()});
- const gs=$('#gs');if(gs)gs.onclick=()=>goShop(SEL,'poke');const gk=$('#gk');if(gk)gk.onclick=()=>goShop(SEL,'skin')}
-function goShop(id,kind){SH.t=kind=='skin'?'skin':S.mgs[id]?'mega':'poke';SH.q=(S.caught[id]?S.caught[id].n:NAMES[id])||'';SH.rf=-1;SH.sk='all';SH.n=60;tab='shop';render()}
+ }
 function battleView(){
  if(!S.lead){$('#m').innerHTML='<h2>Choose your partner</h2><div class="pick">'+[[10,'Caterpie'],[172,'Pichu'],[255,'Torchic']].map(([i,n])=>`<button class="btn" data-i="${i}"><img src="${SP}${i}.png" alt=""><span>${n}</span></button>`).join('')+'</div>';
   document.querySelectorAll('.pick .btn').forEach(b=>b.onclick=async()=>{const p=await info(+b.dataset.i);S.caught[p.id]={n:p.name,t:p.types,b:p.bst,sk:[]};S.lead=p.id;checkAch();render()});return}
@@ -154,7 +300,8 @@ function shop(){const T=[['poke','Pokémon'],['mega','Mega Pokémon'],['skin','S
  document.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>{SH.t=b.dataset.st;SH.n=60;shop()});
  const r=$('#rf2');if(r)r.onchange=e=>{SH.rf=+e.target.value;SH.n=60;shopGrid()};const f=$('#skf');if(f)f.onchange=e=>{SH.sk=e.target.value;SH.n=60;shopGrid()};
  $('#sq').oninput=e=>{SH.q=e.target.value;SH.n=60;shopGrid()};shopGrid()}
-function shopGrid(){const g=$('#sgrid');if(!g||tab!='shop')return;let items=[];
+function shopGrid(){const g=$('#sgrid');if(!g||tab!='shop')return;
+ let items=[];
  if(SH.t=='skin')Object.keys(S.caught).map(Number).forEach(i=>Object.keys(SKN).forEach(k=>{if(!has(i,k)&&(SH.sk=='all'||SH.sk==k))items.push([i,k])}));
  else(SH.t=='mega'?Object.keys(S.mgs).map(Number).sort(mgSort):Array.from({length:TOTAL},(_,k)=>k+1)).forEach(i=>{if(S.caught[i])return;if(SH.rf>=0&&rar(i)!=SH.rf)return;items.push([i])});
  const q=SH.q.trim().toLowerCase();if(q)items=items.filter(([i])=>((S.caught[i]?S.caught[i].n:NAMES[i])||'').toLowerCase().includes(q));
@@ -165,8 +312,8 @@ function shopGrid(){const g=$('#sgrid');if(!g||tab!='shop')return;let items=[];
  g.innerHTML=(items.length?`<div class="stats" style="margin-bottom:8px">${items.length} item${items.length==1?'':'s'} · you have 💎 ${S.gems}</div><div class="shopgrid">${cards}</div>`+(items.length>SH.n?'<div class="ctl" style="margin-top:12px"><button class="btn" id="more">Show more</button></div>':''):`<div class="stats">${empty}</div>`);
  const mo=$('#more');if(mo)mo.onclick=()=>{SH.n+=60;shopGrid()};const rm=$('#rm');if(rm)rm.onclick=async()=>{rm.disabled=true;await loadMegas();shopGrid()};
  g.querySelectorAll('[data-bp]').forEach(b=>b.onclick=async()=>{const id=+b.dataset.bp,r=rar(id);if(r<0||S.gems<COST[r]||S.caught[id])return;b.disabled=true;
-  try{const p=await info(id);S.gems-=COST[r];S.caught[id]={n:p.name,t:p.types,b:p.bst,sk:[]};if(!S.lead)S.lead=id;jingle([72,76,79,84]);toast(p.name+' joined your collection!');checkAch();save();hud();shopGrid()}catch(e){toast('Could not load Pokémon data. Try again.');b.disabled=false}});
- g.querySelectorAll('[data-bs]').forEach(b=>b.onclick=()=>{const[i,k]=b.dataset.bs.split(':'),id=+i,pr=SKINP[k];if(S.gems<pr||has(id,k))return;S.gems-=pr;S.caught[id].sk=[...(S.caught[id].sk||[]),k];jingle([72,76,79]);toast('Unlocked the '+SKN[k]+' skin for '+S.caught[id].n);checkAch();save();hud();shopGrid()})}
+  try{const p=await info(id);S.gems-=COST[r];S.caught[id]={n:p.name,t:p.types,b:p.bst,sk:[]};if(!S.lead)S.lead=id;jingle([72,76,79,84]);toast(p.name+' joined your collection!');missionEvent({buy:1});checkAch();save();hud();shopGrid()}catch(e){toast('Could not load Pokémon data. Try again.');b.disabled=false}});
+ g.querySelectorAll('[data-bs]').forEach(b=>b.onclick=()=>{const[i,k]=b.dataset.bs.split(':'),id=+i,pr=SKINP[k];if(S.gems<pr||has(id,k))return;S.gems-=pr;S.caught[id].sk=[...(S.caught[id].sk||[]),k];jingle([72,76,79]);toast('Unlocked the '+SKN[k]+' skin for '+S.caught[id].n);missionEvent({buy:1});checkAch();save();hud();shopGrid()})}
 function mapPick(){$('#m').innerHTML='<h2 style="margin-top:0">Choose a map</h2><div class="ctl" style="margin-bottom:12px"><button class="btn" id="bk">Back</button></div>'+MAPS.map((m,i)=>`<div class="ach on" style="align-items:center;cursor:pointer;${m.special?'border-color:#f97316':''}" data-m="${i}" tabindex="0"><div style="width:56px;height:56px;border-radius:8px;background:${m.bg};border:3px solid ${m.lane}"></div><div><b>${m.n} · ${m.sz}v${m.sz}${m.special?' · Special':''}</b><div class="stats">${m.desc}</div></div></div>`).join('');
  $('#bk').onclick=render;document.querySelectorAll('[data-m]').forEach(e=>e.onclick=()=>{MI=+e.dataset.m;choose()})}
 function choose(){const ids=Object.keys(S.caught).map(Number).sort((x,y)=>x-y);
@@ -196,7 +343,7 @@ async function start(mid){S.lead=mid;save();$('#m').innerHTML='<div class="log">
   tab='battle';render()}
  catch(e){M=null;toast('Could not reach PokeAPI. Check your connection and try again.');render()}}
 function gain(e,x){e.xp+=x;while(e.xp>=80*e.lv&&e.lv<15){e.xp-=80*e.lv;e.lv++;ST(e);e.hp=Math.min(e.max,e.hp+e.max*.15);M.fx.push({x:e.x,y:e.y-50,t:1,s:'Level '+e.lv,c:'#4ade80'})}}
-function ko(a,d){d.hp=0;d.dead=d.wild?1:6;d.zt=0;if(d.wild)d.resp=M.mp.rs||20;else d.carry=0;if(a.p){if(d.wild){a.carry=Math.min(15,a.carry+(M.mp.orb||4));gain(a,70)}else{a.k++;gain(a,120)}}}
+function ko(a,d){d.hp=0;d.dead=d.wild?1:6;d.zt=0;if(d.wild)d.resp=M.mp.rs||20;else d.carry=0;if(a.p){if(d.wild){a.carry=Math.min(15,a.carry+(M.mp.orb||4));a.wk=(a.wk||0)+1;gain(a,70)}else{a.k++;gain(a,120)}}}
 function strike(a,d,pow,type){let eff=1;if(d.p)d.p.types.forEach(t=>eff*=(X[type]||{})[t]??1);const stab=a.p&&a.p.types.includes(type)?1.25:1;
  const n=Math.max(1,Math.round(pow*a.atk/(d.def+40)*2.5*eff*stab*(.9+Math.random()*.2)*(d.sh>0?.5:1)));d.hp-=n;d.zt=0;d.last=a;if(a.p){a.ch=Math.min(100,a.ch+n/6);if(a.human&&eff>1)S.se++}
  M.fx.push({x:d.x,y:d.y-30,t:.6,s:n,c:eff>1?'#fbbf24':'#fff'});if(d.hp<=0)ko(a,d);return n}
@@ -225,8 +372,10 @@ function skill(e,i,t){if(e.cd[i]>0)return;const[nm,kind,st,pow,cd]=i==1?e.k1:e.k
  else if(kind=='heal'){M.f.filter(x=>x.team==e.team&&!x.dead&&dist(e,x)<220).forEach(x=>{x.hp=Math.min(x.max,x.hp+x.max*.25)});M.fx.push({o:1,x:e.x,y:e.y,r:220,t:.5})}
  else if(kind=='shield'){e.sh=3;M.fx.push({x:e.x,y:e.y-50,t:1,s:'Shield!',c:'#60a5fa'})}
  if(e.human)M.fx.push({x:e.x,y:e.y-70,t:.8,s:nm,c:'#fbbf24'})}
+function usePotion(e){const h=potionUse(e);if(h>0){M.fx.push({x:e.x,y:e.y-30,t:.8,s:'+'+Math.round(h),c:'#4ade80'});jingle([76,81])}}
 function unite(e){if(e.ch<100)return;e.ch=0;burst(e,170,170);e.hp=Math.min(e.max,e.hp+e.max*.3);if(e.human)jingle([72,79,84])}
-function goTo(e,x,y,dt,stop){const dx=x-e.x,dy=y-e.y,d=Math.hypot(dx,dy),sp=e.spd*(M.mp.sp||1)*(e.slow>0?.5:1)*dt;if(d>stop){e.x+=dx/d*sp;e.y+=dy/d*sp}
+const ZONE_SPEED=1.3,inZone=e=>{const g=M.gl[e.team];return !!g&&Math.hypot(e.x-g[0],e.y-g[1])<M.gr*2};
+function goTo(e,x,y,dt,stop){const dx=x-e.x,dy=y-e.y,d=Math.hypot(dx,dy),sp=e.spd*(M.mp.sp||1)*(e.slow>0?.5:1)*(inZone(e)?ZONE_SPEED:1)*dt;if(d>stop){e.x+=dx/d*sp;e.y+=dy/d*sp}
  M.ob.forEach(o=>{const ox=e.x-o.x,oy=e.y-o.y,od=Math.hypot(ox,oy)||1,m=o.r+22;if(od<m-.01){const nx=ox/od,ny=oy/od,sg=(-ny*dx+nx*dy)>=0?1:-1;e.x=o.x+nx*m-ny*sg*sp*.6;e.y=o.y+ny*m+nx*sg*sp*.6}});
  e.x=Math.max(30,Math.min(AW-30,e.x));e.y=Math.max(30,Math.min(AH-30,e.y));
  if(M.ring){const R=M.ring,rx=e.x-R.x,ry=e.y-R.y,rd=Math.hypot(rx,ry);if(rd>R.ro-30){e.x=R.x+rx/rd*(R.ro-30);e.y=R.y+ry/rd*(R.ro-30)}}}
@@ -234,16 +383,17 @@ function ringPath(e,tx,ty){const R=M.ring,px=e.x,py=e.y,dx=tx-px,dy=ty-py,l2=dx*
  if(cd>R.ri+90)return[tx,ty];const ae=Math.atan2(py-R.y,px-R.x),at=Math.atan2(ty-R.y,tx-R.x);let da=at-ae;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
  const a=ae+Math.sign(da||1)*Math.min(Math.abs(da),.6),r=Math.max(R.ri+130,Math.min(R.ro-90,Math.hypot(px-R.x,py-R.y)));return[R.x+r*Math.cos(a),R.y+r*Math.sin(a)]}
 function ai(e,dt){const lv=[...M.lava,...M.gas].find(l=>Math.hypot(e.x-l.x,e.y-l.y)<l.r);if(lv){goTo(e,e.x+(e.x-lv.x),e.y+(e.y-lv.y),dt,5);return}if(M.ring&&Math.hypot(e.x-M.ring.x,e.y-M.ring.y)<M.ring.ri+60){goTo(e,e.x+(e.x-M.ring.x),e.y+(e.y-M.ring.y),dt,5);return}const en=foes(e),goal=M.gl[e.team?0:1];let mv;const t=near(e,en,260);
- if(e.hp<e.max*.3&&!e.carry)mv=[...M.sp[e.team],20];else if(e.carry>=6||(e.carry&&M.t<25))mv=[goal[0],goal[1],20];else if(t)mv=[t.x,t.y,e.rng*.8];
+ const gb=M.gl[e.team],inb=Math.hypot(e.x-gb[0],e.y-gb[1])<M.gr;if((e.hp<e.max*.3||(inb&&e.hp<e.max*.8))&&!e.carry)mv=[...M.sp[e.team],20];else if(e.carry>=6||(e.carry&&M.t<25))mv=[goal[0],goal[1],20];else if(t)mv=[t.x,t.y,e.rng*.8];
  else{const q=near(e,wilds(),2000);mv=q?[q.x,q.y,e.rng*.8]:[AW/2,AH/2,20]}
  if(M.ring){const w2=ringPath(e,mv[0],mv[1]);mv[0]=w2[0];mv[1]=w2[1]}goTo(e,mv[0],mv[1],dt,mv[2]);const tg=near(e,[...en,...wilds()],e.rng+10);if(tg){basic(e,tg);if(Math.random()<.02)skill(e,2,tg);if(Math.random()<.015)skill(e,1);if(e.ch>=100&&en.length&&Math.random()<.05)unite(e)}}
 function upd(dt){const k=M.keys;M.t-=dt;
- M.f.forEach(e=>{e.cd=e.cd.map(c=>c-dt);if(e.dead){e.dead-=dt;if(e.dead<=0){e.dead=0;e.hp=e.max;e.x=M.sp[e.team][0];e.y=M.sp[e.team][1]}return}
+ M.f.forEach(e=>{e.cd=e.cd.map(c=>c-dt);potionTick(e,dt);if(e.dead){e.dead-=dt;if(e.dead<=0){e.dead=0;e.hp=e.max;e.x=M.sp[e.team][0];e.y=M.sp[e.team][1]}return}
   if(M.ring&&Math.hypot(e.x-M.ring.x,e.y-M.ring.y)<M.ring.ri){M.fx.push({x:e.x,y:e.y-40,t:1.2,s:'Fell into the volcano!',c:'#f97316'});ko({},e);return}
   if(e.dot){e.hp-=e.dot.dps*dt;e.dot.t-=dt;if(e.hp<=0){ko(e.dot.src,e);e.dot=null;return}if(e.dot.t<=0)e.dot=null}
+  const hb=M.gl[e.team];if(e.hp<e.max&&Math.hypot(e.x-hb[0],e.y-hb[1])<M.gr){const h=Math.min(e.max-e.hp,e.max*.1*dt);e.hp+=h;if(e.human){e.ha=(e.ha||0)+h;if(e.ha>=e.max*.05){M.fx.push({x:e.x,y:e.y-30,t:.6,s:'+'+Math.round(e.ha),c:'#4ade80'});e.ha=0}}}e.ch=Math.min(100,e.ch+5*dt);
   e.slow-=dt;e.sh-=dt;if(e.stun>0){e.stun-=dt;return}
   if(e.human){const dx=(k.d||k.arrowright?1:0)-(k.a||k.arrowleft?1:0),dy=(k.s||k.arrowdown?1:0)-(k.w||k.arrowup?1:0),m=Math.hypot(dx,dy)||1;goTo(e,e.x+dx/m*50,e.y+dy/m*50,dt,0);if(dx||dy)e.fd={x:dx/m,y:dy/m};
-   const tg=near(e,[...foes(e),...wilds()],e.rng+20);if(tg&&(k.j||k[' ']||k.click))basic(e,tg);if(k.k)skill(e,1);if(k.l)skill(e,2,near(e,[...foes(e),...wilds()],300));if(k.u)unite(e)}
+   const tg=near(e,[...foes(e),...wilds()],e.rng+20);if(tg&&(k.j||k[' ']||k.click))basic(e,tg);if(k.k)skill(e,1);if(k.l)skill(e,2,near(e,[...foes(e),...wilds()],300));if(k.u)unite(e);if(k.i)usePotion(e)}
   else ai(e,dt);
   const gp=M.gl[e.team?0:1];if(e.carry&&Math.hypot(e.x-gp[0],e.y-gp[1])<M.gr){e.zt+=dt;if(e.zt>=1.2){M.sc[e.team]+=e.carry;if(e.human)e.pts+=e.carry;M.fx.push({x:e.x,y:e.y-60,t:1,s:'+'+e.carry,c:'#fbbf24'});e.carry=0;e.zt=0}}else e.zt=0});
  M.w.forEach(q=>{if(q.dead){q.resp-=dt;if(q.resp<=0){q.dead=0;q.hp=q.max}return}q.cd-=dt;if(q.last&&!q.last.dead&&dist(q,q.last)<130){if(q.cd<=0){q.cd=1.2;strike(q,q.last,15,'normal')}}else q.last=null});
@@ -251,9 +401,20 @@ function upd(dt){const k=M.keys;M.t-=dt;
  if(M.gas.length)M.f.forEach(e=>{if(!e.dead&&M.gas.some(g=>Math.hypot(e.x-g.x,e.y-g.y)<g.r)){e.hp-=e.max*.04*dt;e.slow=Math.max(e.slow,.3);e.zt=0;if(e.hp<=0)ko({},e)}});
  M.ob.forEach(o=>{if(o.t!='geyser')return;o.c+=dt;if(o.c>=9){o.c=0;M.fx.push({o:1,x:o.x,y:o.y,r:120,t:.5});M.f.forEach(e=>{if(!e.dead&&Math.hypot(e.x-o.x,e.y-o.y)<120){e.hp-=e.max*.2;e.zt=0;M.fx.push({x:e.x,y:e.y-30,t:.8,s:'Eruption!',c:'#f97316'});if(e.hp<=0)ko({},e)}})}});
  M.fx=M.fx.filter(f=>(f.t-=dt)>0);if(M.t<=0)endM()}
+// Side panels during a match: your team (left) and the opponents (right), with levels and health.
+function rosterDraw(c){
+ const W=132,RH=21,top=52;
+ [[0,8,'Your team','#3b82f6'],[1,900-8-W,'Opponents','#ef4444']].forEach(([tm,x,title,col])=>{
+  const fs=M.f.filter(e=>e.team==tm);
+  c.save();c.fillStyle='rgba(18,32,47,.78)';c.fillRect(x,top,W,18+fs.length*RH+4);c.fillStyle=col;c.fillRect(x,top,W,3);
+  c.textAlign='left';c.font='bold 11px sans-serif';c.fillStyle='#cbd5e1';c.fillText(title,x+6,top+15);
+  fs.forEach((e,i)=>{const y=top+18+i*RH,nm=(e.p&&e.p.name)||'?';c.globalAlpha=e.dead?.4:1;
+   c.font=(e.human?'bold ':'')+'12px sans-serif';c.fillStyle=e.human?'#fbbf24':'#fff';c.fillText('Lv'+e.lv+' '+(nm.length>9?nm.slice(0,8)+'…':nm),x+6,y+10);
+   c.fillStyle='#0b1520';c.fillRect(x+6,y+13,W-12,4);c.fillStyle=col;c.fillRect(x+6,y+13,(W-12)*Math.max(0,Math.min(1,e.hp/e.max)),4)});
+  c.restore()})}
 function draw(){const c=$('#cv').getContext('2d'),me=M.f[0],cx=Math.max(0,Math.min(AW-900,me.x-450)),cy=Math.max(0,Math.min(AH-520,me.y-260));
  c.clearRect(0,0,900,520);c.save();c.translate(-cx,-cy);c.fillStyle=M.mp.bg;c.fillRect(0,0,AW,AH);c.fillStyle=M.mp.lane;if(M.ring){const R=M.ring;c.beginPath();c.arc(R.x,R.y,R.ro,0,7);c.fill();const g=c.createRadialGradient(R.x,R.y,R.ri*.1,R.x,R.y,R.ri);g.addColorStop(0,'#fff176');g.addColorStop(.5,'#f97316');g.addColorStop(1,'#7f1d1d');c.beginPath();c.arc(R.x,R.y,R.ri,0,7);c.fillStyle=g;c.fill();c.strokeStyle='#111';c.lineWidth=8;c.stroke();c.beginPath();c.arc(R.x,R.y,R.ro,0,7);c.stroke()}else c.fillRect(0,AH/2-90,AW,180);M.lava.forEach(l=>{const g=c.createRadialGradient(l.x,l.y,l.r*.2,l.x,l.y,l.r);g.addColorStop(0,'#ffd23f');g.addColorStop(.6,'#f97316');g.addColorStop(1,'#7f1d1d');c.fillStyle=g;c.beginPath();c.arc(l.x,l.y,l.r,0,7);c.fill()});
- [[M.gl[0],'#3b82f6'],[M.gl[1],'#ef4444']].forEach(([g,col])=>{c.beginPath();c.arc(g[0],g[1],M.gr,0,7);c.fillStyle=col+'44';c.fill();c.strokeStyle=col;c.lineWidth=4;c.stroke()});
+ [M.gl[0],M.gl[1]].forEach(g=>{c.beginPath();c.arc(g[0],g[1],M.gr*2,0,7);c.fillStyle='rgba(255,255,255,.07)';c.fill();c.strokeStyle='#fff';c.lineWidth=3;c.stroke()});[[M.gl[0],'#3b82f6'],[M.gl[1],'#ef4444']].forEach(([g,col])=>{c.beginPath();c.arc(g[0],g[1],M.gr,0,7);c.fillStyle=col+'44';c.fill();c.strokeStyle=col;c.lineWidth=4;c.stroke()});c.save();[M.gl[0],M.gl[1]].forEach(g=>{c.globalAlpha=.5+.25*Math.sin(M.t*4);c.fillStyle='#4ade80';c.fillRect(g[0]-5,g[1]-18,10,36);c.fillRect(g[0]-18,g[1]-5,36,10);c.globalAlpha=.9;c.font='bold 11px sans-serif';c.textAlign='center';c.fillText('HEAL',g[0],g[1]+64)});c.restore();
  M.gas.forEach(g=>{const gr=c.createRadialGradient(g.x,g.y,g.r*.1,g.x,g.y,g.r);gr.addColorStop(0,'rgba(190,220,80,.6)');gr.addColorStop(1,'rgba(120,160,40,0)');c.fillStyle=gr;c.beginPath();c.arc(g.x,g.y,g.r,0,7);c.fill();c.fillStyle='rgba(210,235,110,.25)';[[-.4,-.2],[.35,.15],[0,.45]].forEach(([a,b])=>{c.beginPath();c.arc(g.x+a*g.r,g.y+b*g.r,g.r*.3,0,7);c.fill()})});
  M.ob.forEach(o=>{if(o.t=='cactus'){const r=o.r;c.fillStyle='#3f9a4a';c.strokeStyle='#245c2d';c.lineWidth=3;[[-9,-r*1.2,18,r*1.7],[-r*.8,-r*.4,r*.8,9],[-r*.8,-r*.85,9,r*.55],[0,-r*.1,r*.8,9],[r*.71,-r*.55,9,r*.5]].forEach(([a,b,w,h])=>{c.fillRect(o.x+a,o.y+b,w,h);c.strokeRect(o.x+a,o.y+b,w,h)});return}
  if(o.t=='mound'){const r=o.r;c.beginPath();c.ellipse(o.x,o.y,r*1.15,r*.8,0,0,7);c.fillStyle='#d9b36c';c.fill();c.strokeStyle='#b8924d';c.lineWidth=4;c.stroke();c.beginPath();c.ellipse(o.x-r*.3,o.y-r*.25,r*.45,r*.25,0,0,7);c.fillStyle='rgba(255,255,255,.2)';c.fill();return}
@@ -269,9 +430,9 @@ function draw(){const c=$('#cv').getContext('2d'),me=M.f[0],cx=Math.max(0,Math.m
  c.restore();c.textAlign='center';c.fillStyle='rgba(18,32,47,.85)';c.fillRect(300,8,300,34);c.fillStyle='#fff';c.font='bold 18px sans-serif';
  const t=Math.max(0,Math.ceil(M.t));c.fillText(`Blue ${M.sc[0]}  –  ${M.sc[1]} Red   ${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`,450,31);
  c.textAlign='left';c.font='14px sans-serif';c.fillStyle='rgba(18,32,47,.85)';c.fillRect(8,484,884,28);c.fillStyle='#fff';
- c.fillText(`K ${me.k1[0]} ${me.cd[1]>0?me.cd[1].toFixed(1):'ready'}   L ${me.k2[0]} ${me.cd[2]>0?me.cd[2].toFixed(1):'ready'}   U Unite ${Math.floor(me.ch)}%   Lv ${me.lv}`,16,503);
+ let kx=16;[['K',me.k1[0],me.cd[1]],['L',me.k2[0],me.cd[2]],['I','Potion',me.pot||0]].forEach(([k,nm,cd])=>{const tx=k+' '+nm,wd=c.measureText(tx).width+18;c.fillStyle=cd>0?'#b91c1c':'#15803d';c.beginPath();if(c.roundRect)c.roundRect(kx,488,wd,20,10);else c.rect(kx,488,wd,20);c.fill();c.fillStyle='#fff';c.fillText(tx,kx+9,503);kx+=wd+10});c.fillText(`U Unite ${Math.floor(me.ch)}%   Lv ${me.lv}`,kx+6,503);rosterDraw(c);
  if(me.dead){c.textAlign='center';c.font='bold 24px sans-serif';c.fillText('Respawning in '+Math.ceil(me.dead),450,260)}}
-function matchView(){$('#m').innerHTML='<canvas id="cv" width="900" height="520" style="width:100%;max-width:900px;border:2px solid var(--line);border-radius:12px;display:block;margin:auto"></canvas><div class="stats" style="margin-top:8px">Move: WASD or arrows · Attack: J, Space or click · K and L: the two type powers of your Pokémon (named at the bottom) · Unite move: U when charged. Defeat wild Pokémon to collect energy, then stand in the red goal to score it. Obstacles block movement, so go around them.</div>';
+function matchView(){$('#m').innerHTML='<canvas id="cv" width="900" height="520" style="width:100%;max-width:900px;border:2px solid var(--line);border-radius:12px;display:block;margin:auto"></canvas><div class="stats" style="margin-top:8px">Move: WASD or arrows · Attack: J, Space or click · K and L: the two type powers of your Pokémon (named at the bottom: green means ready, red means recharging) · Unite move: U when charged · Potion: I heals a quarter of your health, then recharges for 15 seconds. Defeat wild Pokémon to collect energy, then stand in the red goal to score it. Obstacles block movement, so go around them. Your base (the blue circle) heals you while you stand in it, and the white circle around it makes you move 30% faster.</div>';
  const cv=$('#cv');cv.onmousedown=()=>M.keys.click=1;cv.onmouseup=cv.onmouseleave=()=>M.keys.click=0;M.last=performance.now();requestAnimationFrame(loop)}
 function loop(now){if(!M||M.over||!$('#cv'))return;const dt=Math.min(.05,(now-M.last)/1000);M.last=now;
  try{upd(dt);if(M&&!M.over)draw()}catch(err){console.error(err);try{const c=$('#cv').getContext('2d');c.fillStyle='rgba(18,32,47,.9)';c.fillRect(0,0,900,60);c.fillStyle='#fca5a5';c.font='bold 14px sans-serif';c.textAlign='left';c.fillText('Game error: '+err.message,12,34)}catch(e2){}}
@@ -279,12 +440,50 @@ function loop(now){if(!M||M.over||!$('#cv'))return;const dt=Math.min(.05,(now-M.
 const MS=[[30000,'artwork','green','Green ribbon','#4ade80','Artwork'],[80000,'home','blue','Blue ribbon','#60a5fa','3D'],[230000,'shiny','gold','Golden ribbon','#fbbf24','Shiny']];
 function award(id,bp){const c=S.caught[id];c.bp=(c.bp||0)+bp;c.rb=c.rb||[];c.sk=c.sk||[];const m=[];
  MS.forEach(([n,sk,rb,l,col,sn])=>{if(c.bp>=n&&!c.rb.includes(rb)){c.rb.push(rb);if(!c.sk.includes(sk))c.sk.push(sk);m.push(`${l} and the ${sn} skin for ${c.n}`)}});return m}
+const mis=()=>{S.mis=misNormalize(S.mis);misReset(S.mis,Date.now());return S.mis};
+function missionEvent(ev){const done=misEvent(mis(),ev);save();hud();if(done.length)toast('Mission complete: '+MT[done[0]].t+' — claim it in Missions')}
+function claimMis(i){const r=misClaim(mis(),i);if(!r)return;S.gems+=r.gems;save();hud();jingle(r.level?[72,76,79,84]:[72,76]);
+ toast('Mission complete! +💎'+r.mission+(r.level?' · Path level '+r.level+'! +💎'+r.levelGems:'')+(r.prize?' · Choose your 3D skin prize!':''));missions()}
+function missions(){const m=mis(),lv=misLevel(m.done),inLv=m.done%MIS_PER_LEVEL,full=lv>=MIS_MAXLV,nx=lv+1,left=MIS_PER_LEVEL-inLv;
+ const elig=Object.keys(S.caught).map(Number).filter(i=>!has(i,MIS_PRIZE_SKIN)).sort((a,b)=>dn(a)-dn(b));
+ $('#m').innerHTML=`<div class="panel" style="flex-direction:column;align-items:stretch;gap:6px"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><h2 style="margin:0">Reward path · Level ${lv}/${MIS_MAXLV}</h2><span class="stats">${m.done} mission${m.done==1?'':'s'} completed</span></div>
+<div class="stats">${full?'You reached the end of the path. Missions still pay 💎'+MIS_REWARD+' each.':`Finish a mission for 💎${MIS_REWARD}. ${left} more mission${left==1?'':'s'} to reach level ${nx} (💎${misLevelGems(nx)}${nx==MIS_MAXLV?' and a 3D skin for one of your Pokémon':''}).`}</div><div class="bar"><i style="width:${full?100:inLv*100/MIS_PER_LEVEL}%;background:#fbbf24"></i></div><div class="stats" style="margin-top:2px">The path goes back to the start in ${misTimeLeft(m.next-Date.now())}${m.last?' · last time you reached level '+m.last:''}. Missions and any prize you earned are kept.</div></div>`
+ +(m.prize==1?`<div class="panel" style="flex-direction:column;align-items:stretch;gap:8px;border-color:#fbbf24"><h2 style="margin:0">🎁 Level ${MIS_MAXLV} prize</h2><div class="stats">Choose one of your Pokémon to receive the 3D skin. You can only choose once.</div>${elig.length?`<div class="ctl"><select class="btn" id="mpz" aria-label="Pokémon to receive the 3D skin">${elig.map(i=>`<option value="${i}">#${dn(i)} ${S.caught[i].n}</option>`).join('')}</select><button class="btn" id="mpg">Give 3D skin</button></div>`:'<div>All your Pokémon already have the 3D skin. Add a new Pokémon to your collection and come back.</div>'}</div>`:'')
+ +'<h2 style="margin:16px 0 8px">Missions</h2>'
+ +m.act.map((a,i)=>{const t=MT[a.id],ok=a.p>=t.n;return `<div class="ach on" style="align-items:center"><div style="flex:1"><b>${t.t}</b><div class="stats">${a.p} / ${t.n}</div><div class="bar"><i style="width:${100*a.p/t.n}%;background:${ok?'#22c55e':'#60a5fa'}"></i></div></div><button class="btn" data-mclaim="${i}" ${ok?'':'disabled'}>${ok?'Claim ':''}💎${MIS_REWARD}</button></div>`}).join('')
+ +'<h2 style="margin:16px 0 8px">Path rewards</h2><div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(64px,1fr))">'
+ +Array.from({length:MIS_MAXLV},(_,k)=>{const l=k+1,got=lv>=l;return `<div class="cell" style="cursor:default;${got?'border-color:#fbbf24;color:#fff':''}${l==MIS_MAXLV?';grid-column:span 2':''}"><b>${l}</b><div>${got?'✓ ':''}💎${misLevelGems(l)}${l==MIS_MAXLV?' + 3D skin':''}</div></div>`}).join('')+'</div>';
+ document.querySelectorAll('[data-mclaim]').forEach(b=>b.onclick=()=>claimMis(+b.dataset.mclaim));
+ const g=$('#mpg');if(g)g.onclick=()=>{const id=+$('#mpz').value;if(!S.caught[id]||!confirm('Give the 3D skin to '+S.caught[id].n+'? You can only choose once.'))return;if(misClaimPrize(S,id)){save();hud();jingle([72,76,79,84]);toast('3D skin unlocked for '+S.caught[id].n+'!');missions()}}}
+const itemsSection=()=>{const left=boostLeft(S);
+ return `<div class="panel" style="flex-direction:column;align-items:stretch;gap:8px;margin-bottom:16px"><h2 style="margin:0">My items</h2>`+Object.entries(ITEMS).map(([k,it])=>{const n=itemCount(S,k);
+  return `<div class="ach on" style="align-items:center"><div style="font-size:34px">${it.ico}</div><div style="flex:1"><b>${it.n}</b> <span class="stats">× ${n}</span><div class="stats">${it.d} Each win has a ${Math.round(BOOST_DROP*100)}% chance to drop one.</div>${k=='boost'&&left>0?`<div style="color:#fbbf24;font-weight:700;margin-top:4px">Active · ${left} battle${left==1?'':'s'} left</div><div class="bar"><i style="width:${Math.min(100,100*left/it.battles)}%;background:#fbbf24"></i></div>`:''}</div><button class="btn" data-use="${k}" ${n?'':'disabled'}>Use</button></div>`}).join('')+`<div class="ach on" style="align-items:center"><div style="font-size:34px">${POTION.ico}</div><div style="flex:1"><b>${POTION.n}</b> <span class="stats">· every match</span><div class="stats">${POTION.d}</div></div><span class="stats">Key I</span></div></div>`};
+function wireItems(){document.querySelectorAll('[data-use]').forEach(b=>b.onclick=()=>{const k=b.dataset.use;if(itemUse(S,k)){save();hud();jingle([72,76,79]);toast(ITEMS[k].n+' activated — '+boostLeft(S)+' battles of ×2 points.');inv()}})}
+const SAVE_ERR={empty:'Nothing to import — paste a code or choose a file first.',cutoff:'That code looks cut off — copy the whole code and try again.',format:"That doesn't look like a PokéBattles save.",version:'That save is from a different version of the game.',shape:'That save is damaged or incomplete.'};
+const saveSection=()=>`<div class="panel" style="flex-direction:column;align-items:stretch;gap:8px;margin-top:16px"><h2 style="margin:0">Save data</h2><div class="stats">Carry your progress to another browser or device, or keep a backup file.</div><div id="saveinfo">${S.gems} gems · ${Object.keys(S.caught).length} Pokémon · ${S.wins} wins</div><div class="ctl"><button class="btn" data-save="export">Copy code</button><button class="btn" data-save="file">Download file</button></div><textarea id="saveta" rows="4" spellcheck="false" placeholder="Your save code appears here — or paste a code (or file contents) below to import." style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--tx);border:2px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:13px"></textarea><div class="ctl"><button class="btn" data-save="import">Import from text above</button><button class="btn" data-save="filepick">Import from file…</button><input type="file" id="savefile" accept=".json,.txt,application/json,text/plain" hidden></div></div>`;
+function wireSave(){
+ const ta=$('#saveta'),fi=$('#savefile'),on=(k,f)=>document.querySelector('[data-save="'+k+'"]').onclick=f;
+ on('export',()=>{const p=buildExportPayload(S),done=()=>toast('Save code copied — paste it somewhere safe.'),manual=()=>{let ok=false;try{ta.focus();ta.select();ok=document.execCommand('copy')}catch(e){}ok?done():toast('Code ready below — copy it manually.')};
+  ta.value=p.code;ta.focus();ta.select();
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(p.code).then(done,manual);else manual()});
+ on('file',()=>{try{const p=buildExportPayload(S),u=URL.createObjectURL(new Blob([p.fileJson],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download=p.fileBase+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);toast('Save file downloaded.')}catch(e){toast('Could not create the file — use Copy code instead.')}});
+ on('import',()=>doImport(ta.value));
+ on('filepick',()=>fi.click());
+ fi.onchange=()=>{const f=fi.files&&fi.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{fi.value='';doImport(String(rd.result))};rd.onerror=()=>{fi.value='';toast('Could not read that file.')};rd.readAsText(f)}}
+function doImport(text){
+ const r=parseImportPayload(text);
+ if(!r.ok){toast(SAVE_ERR[r.error]||SAVE_ERR.format);return}
+ const cur={gems:S.gems,caught:Object.keys(S.caught).length,wins:S.wins};
+ if(!confirm('Replace your progress?\n\nCurrent: '+cur.gems+' gems, '+cur.caught+' Pokémon, '+cur.wins+' wins\nImported: '+r.summary.gems+' gems, '+r.summary.caught+' Pokémon, '+r.summary.wins+' wins (saved '+(r.summary.saved||'unknown date').slice(0,10)+')\n\nThis cannot be undone.')){toast('Import cancelled — nothing changed.');return}
+ S=applyImportState(S,r.state);SEL=0;Object.entries(S.mgs).forEach(([i,m])=>NAMES[i]=m.n);
+ save();musLabel();render();toast('Imported! '+r.summary.gems+' gems · '+r.summary.caught+' Pokémon · '+r.summary.wins+' wins');
+ if(!scanning)scan()}
 function inv(){const ids=Object.keys(S.caught).map(Number).sort((a,b)=>(S.caught[b].bp||0)-(S.caught[a].bp||0));
- $('#m').innerHTML='<div class="stats" style="margin-bottom:12px">Earn battle points by playing matches with a Pokémon. 30,000 unlocks the Artwork skin and a green ribbon, 80,000 the 3D skin and a blue ribbon, and 230,000 the Shiny skin and a golden ribbon.</div>'+
+ $('#m').innerHTML=itemsSection()+'<div class="stats" style="margin-bottom:12px">Earn battle points by playing matches with a Pokémon. 30,000 unlocks the Artwork skin and a green ribbon, 80,000 the 3D skin and a blue ribbon, and 230,000 the Shiny skin and a golden ribbon.</div>'+
  ids.map(i=>{const c=S.caught[i],bp=c.bp||0,k=mySkin(i),got=MS.filter(m=>bp>=m[0]),nx=MS.find(m=>bp<m[0]),lo=got.length?got[got.length-1][0]:0;
-  return `<div class="ach on inv" style="align-items:center">${img(i,k.s,k.sh,0,c.n)}<div style="flex:1"><b>#${dn(i)} ${c.n}</b>${got.map(m=>`<span style="background:${m[4]};color:#111;border-radius:10px;padding:1px 8px;font-size:12px;margin-left:6px">${m[3]}</span>`).join('')}<div class="stats">${bp.toLocaleString()} battle points${nx?' · next: '+nx[3]+' at '+nx[0].toLocaleString():' · all ribbons earned'}</div>${nx?`<div class="bar"><i style="width:${100*(bp-lo)/(nx[0]-lo)}%;background:${nx[4]}"></i></div>`:''}</div></div>`}).join('')}
-function endM(){const me=M.f[0],win=M.sc[0]>M.sc[1],dr=M.sc[0]==M.sc[1],g=10;M.over=1;S.gems+=g;if(win)S.wins++;S.pts=(S.pts||0)+me.pts;const bp=win?100:50,un=award(me.p.id,bp);checkAch();save();jingle(win?[67,72,76,79,84]:[67,64,60]);
- $('#m').innerHTML=`<div class="panel"><div><h2 style="margin:0 0 6px">${win?'Victory!':dr?'Draw':'Defeat'}</h2><div>Final score ${M.sc[0]} – ${M.sc[1]}. You scored ${me.pts} points and defeated ${me.k} opponents.</div><div style="margin:8px 0">You earned 💎 ${g}.</div><div>${me.p.name} earned ${bp.toLocaleString()} battle points (total ${S.caught[me.p.id].bp.toLocaleString()}).</div>${un.map(u=>`<div style="color:#fbbf24;font-weight:700;margin-top:4px">Unlocked: ${u}!</div>`).join("")}<div style="height:8px"></div><button class="btn" id="pa">Back to menu</button></div></div>`;$('#pa').onclick=()=>{M=null;render()}}
+  return `<div class="ach on inv" style="align-items:center">${img(i,k.s,k.sh,0,c.n)}<div style="flex:1"><b>#${dn(i)} ${c.n}</b>${got.map(m=>`<span style="background:${m[4]};color:#111;border-radius:10px;padding:1px 8px;font-size:12px;margin-left:6px">${m[3]}</span>`).join('')}<div class="stats">${bp.toLocaleString()} battle points${nx?' · next: '+nx[3]+' at '+nx[0].toLocaleString():' · all ribbons earned'}</div>${nx?`<div class="bar"><i style="width:${100*(bp-lo)/(nx[0]-lo)}%;background:${nx[4]}"></i></div>`:''}</div></div>`}).join('')+saveSection();wireSave();wireItems()}
+function endM(){const me=M.f[0],win=M.sc[0]>M.sc[1],dr=M.sc[0]==M.sc[1],g=win?15:10;M.over=1;S.gems+=g;if(win)S.wins++;S.pts=(S.pts||0)+me.pts;const bb=boostBattle(S,win?100:50),bp=bb.bp,un=award(me.p.id,bp),drop=win&&boostDrop(S);missionEvent({play:1,win:win?1:0,kills:me.k,pts:me.pts,wild:me.wk||0});checkAch();save();jingle(win?[67,72,76,79,84]:[67,64,60]);
+ $('#m').innerHTML=`<div class="panel"><div><h2 style="margin:0 0 6px">${win?'Victory!':dr?'Draw':'Defeat'}</h2><div>Final score ${M.sc[0]} – ${M.sc[1]}. You scored ${me.pts} points and defeated ${me.k} opponents.</div><div style="margin:8px 0">You earned 💎 ${g}.</div><div>${me.p.name} earned ${bp.toLocaleString()} battle points (total ${S.caught[me.p.id].bp.toLocaleString()}).${bb.boosted?' Points Booster ×2 — '+bb.left+' battle'+(bb.left==1?'':'s')+' left.':''}</div>${un.map(u=>`<div style="color:#fbbf24;font-weight:700;margin-top:4px">Unlocked: ${u}!</div>`).join("")}${drop?'<div style="color:#fbbf24;font-weight:700;margin-top:4px">🎁 You found a Points Booster! Use it from Inventory → My items.</div>':''}<div style="height:8px"></div><button class="btn" id="pa">Back to menu</button></div></div>`;$('#pa').onclick=()=>{M=null;render()}}
 const kn=e=>{const a=[(e.key||'').toLowerCase()];if(e.code&&e.code.startsWith('Key'))a.push(e.code.slice(3).toLowerCase());if(e.code=='Space')a.push(' ');return a};
 addEventListener('keydown',e=>{if(!M||M.over)return;const a=kn(e);a.forEach(k=>M.keys[k]=1);if(a.some(k=>NOKEY.includes(k)))e.preventDefault()});
 addEventListener('keyup',e=>{if(M)kn(e).forEach(k=>M.keys[k]=0)});
