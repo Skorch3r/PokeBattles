@@ -5,7 +5,7 @@
 ## Verified findings (all reproduce in code)
 
 1. **[Low] No file-size limit** — `fi.onchange` (l.505) reads any file straight into a string (`rd.readAsText(f)`); a 100 MB file freezes the tab. (Paste path is practically bounded by the textarea; out of scope.)
-2. **[Medium] validateSaveState (l.51) checks outer shape only** — caught values are `isObj` but **no per-PRG field checks** (`n`/`t`/`b`/`sk`/`bp`/`rb`), `S.pts` is **not validated at all** (`endM` does `S.pts=(S.pts||0)+me.pts` → text concatenation), `skin`/`mgs`/`bst`/`ach`/`items`/`mis` internals unchecked. Repro: `t` as string → `c.t.join is not a function` in the dex panel (l.312).
+2. **[Medium] validateSaveState (l.61) checks outer shape only** — caught values are `isObj` but **no per-PRG field checks** (`n`/`t`/`b`/`sk`/`bp`/`rb`), `S.pts` is **not validated at all** (`endM` does `S.pts=(S.pts||0)+me.pts` → text concatenation), `skin`/`mgs`/`bst`/`ach`/`items`/`mis` internals unchecked. Repro: `t` as string → `c.t.join is not a function` in the dex panel (l.312).
 3. **[High] Stored XSS via imported save** — owned names, caught types, and mega names are interpolated **raw** into `innerHTML` at l.312 (panel: `${c.n}`, `${c.t.join(' / ')}`), l.315 (cells: `${g.n}` / `NAMES[i]`), l.342 (shop owned: `${c.n}`), l.343 (shop: `${nmv}` from `NAMES[i]`), l.353 (picker: `${g.n}`), l.484 (prize select: `${S.caught[i].n}`), l.517 (inventory: `${c.n}`), plus **`img()` alt attribute** (l.222: `alt="${alt||''}"` — carries the raw name). `doImport` → l.511 copies imported mega names into `NAMES` (`NAMES[i]=m.n`). No `esc()` exists in the file (grep: 0). An `<img src=x onerror=…>` name runs on import + every dex/shop open.
 
 ## Design decisions
