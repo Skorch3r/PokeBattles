@@ -27,7 +27,7 @@ nav button.on{background:var(--red);border-color:var(--red)}
 .ach{display:flex;gap:12px;padding:10px 12px;margin-bottom:8px;border:2px solid var(--line);border-radius:8px;background:var(--panel);opacity:.55}
 .ach.on{opacity:1;border-color:var(--gold)}.ach b{display:block}
 #toast{z-index:60;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--gold);color:#222;font-weight:800;padding:10px 18px;border-radius:8px;display:none}
-.shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.card2{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}.card2 img{width:96px;height:96px;object-fit:contain;image-rendering:pixelated}.card2 .btn{width:100%;padding:6px 8px}input.btn{font-weight:400;min-width:160px}.inv img{width:72px;height:72px;object-fit:contain}.panel{display:flex;gap:16px;align-items:center;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px}.panel img{width:120px;height:120px;object-fit:contain}.btn.sel{border-color:var(--gold);background:#3a3320}.cell img{object-fit:contain}.cell.cur{outline:2px solid #fff}.cell.mg{box-shadow:inset 0 0 0 2px #c084fc}select.btn{padding:8px}
+.shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.card2{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}.card2 img{width:96px;height:96px;object-fit:contain;image-rendering:pixelated}.card2 .btn{width:100%;padding:6px 8px}input.btn{font-weight:400;min-width:160px}.inv img{width:72px;height:72px;object-fit:contain}.panel{display:flex;gap:16px;align-items:center;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px}.panel img{width:120px;height:120px;object-fit:contain}.btn.sel{border-color:var(--gold);background:#3a3320}.cell img{object-fit:contain}.cell.cur{outline:2px solid #fff}.cell.lock{opacity:.45}.cell.mg{box-shadow:inset 0 0 0 2px #c084fc}select.btn{padding:8px}
 .pick{display:flex;gap:12px;flex-wrap:wrap}.pick .btn{display:flex;flex-direction:column;align-items:center}.pick img{width:96px;height:96px;image-rendering:pixelated}
 @media(max-width:560px){.mon img{width:100px;height:100px}.card{min-width:130px}}
 @media(prefers-reduced-motion:reduce){.bar i{transition:none}}
@@ -54,6 +54,7 @@ function validateSaveState(st){
  if(Object.values(st.caught).some(c=>!isObj(c)))return null;
  for(const k of['mgs','skin','bst','mis','items'])if(st[k]!==undefined&&!isObj(st[k]))return null;
  if(st.boost!==undefined&&!isNum(st.boost))return null;
+ if(st.diff!==undefined&&!['easy','normal','hard'].includes(st.diff))return null;
  const o={...st};
  for(const k of['se','crit','lead']){if(o[k]===undefined)o[k]=0;else if(!isNum(o[k]))return null}
  return o;
@@ -79,6 +80,7 @@ function parseImportPayload(text){
 function applyImportState(prevS,imported){
  const s=JSON.parse(JSON.stringify(imported));
  s.skin=s.skin||{};s.gems=s.gems??0;s.bst=s.bst||{};s.mgs=s.mgs||{};s.pts=s.pts||0;
+ s.diff=['easy','normal','hard'].includes(s.diff)?s.diff:'normal';
  return s;
 }
 </script>
@@ -193,12 +195,29 @@ const confettiDone=(ps,t,h)=>t>7||ps.every(p=>p.y>h+30);
 const HK_KEYS=atob('YXJp').split(''),HK_SECS=2;
 function holdUpdate(st,held,dt){if(!held){st.t=0;st.fired=false;return false}st.t+=dt;if(!st.fired&&st.t>=HK_SECS){st.fired=true;return true}return false}
 </script>
+<script id="difficulty">
+// Difficulty levels — pure layer. No DOM, no globals from the main script.
+const DIFF_IDS=['easy','normal','hard'];
+const DIFFS={
+ easy:{label:'Easy',power:.85,ai:[.01,.0075,.02],retreat:.15,gems:[10,10],points:[80,40],leg:false,
+  hint:'Enemies ×0.85, lazier AI, gentle rewards. No legendary Pokémon.'},
+ normal:{label:'Normal',power:1,ai:[.02,.015,.05],retreat:.3,gems:[20,15],points:[100,50],leg:false,
+  hint:'The standard game.'},
+ hard:{label:'Hard',power:1.2,ai:[.05,.04,.12],retreat:.4,gems:[30,25],points:[140,90],leg:true,
+  hint:'Enemies ×1.2, sharper AI, a legendary on their team — and the best rewards.'}
+};
+const diffOf=s=>s&&DIFF_IDS.includes(s.diff)?s.diff:'normal';
+const enemyPower=d=>DIFFS[d].power,aiRates=d=>DIFFS[d].ai,retreatAt=d=>DIFFS[d].retreat;
+const matchGems=(d,win)=>DIFFS[d].gems[win?0:1],matchPoints=(d,win)=>DIFFS[d].points[win?0:1];
+const legendaryAllowed=d=>DIFFS[d].leg;
+</script>
 <script>
 const API='https://pokeapi.co/api/v2/',SP='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/',TOTAL=1025;
 const X={normal:{rock:.5,steel:.5,ghost:0},fire:{fire:.5,water:.5,grass:2,ice:2,bug:2,rock:.5,dragon:.5,steel:2},water:{fire:2,water:.5,grass:.5,ground:2,rock:2,dragon:.5},electric:{water:2,electric:.5,grass:.5,ground:0,flying:2,dragon:.5},grass:{fire:.5,water:2,grass:.5,poison:.5,ground:2,flying:.5,bug:.5,rock:2,dragon:.5,steel:.5},ice:{fire:.5,water:.5,grass:2,ice:.5,ground:2,flying:2,dragon:2,steel:.5},fighting:{normal:2,ice:2,poison:.5,flying:.5,psychic:.5,bug:.5,rock:2,ghost:0,dark:2,steel:2,fairy:.5},poison:{grass:2,poison:.5,ground:.5,rock:.5,ghost:.5,steel:0,fairy:2},ground:{fire:2,electric:2,grass:.5,poison:2,flying:0,bug:.5,rock:2,steel:2},flying:{electric:.5,grass:2,fighting:2,bug:2,rock:.5,steel:.5},psychic:{fighting:2,poison:2,psychic:.5,dark:0,steel:.5},bug:{fire:.5,grass:2,fighting:.5,poison:.5,flying:.5,psychic:2,ghost:.5,dark:2,steel:.5,fairy:.5},rock:{fire:2,ice:2,fighting:.5,ground:.5,flying:2,bug:2,steel:.5},ghost:{normal:0,psychic:2,ghost:2,dark:.5},dragon:{dragon:2,steel:.5,fairy:0},dark:{fighting:.5,psychic:2,ghost:2,dark:.5,fairy:.5},steel:{fire:.5,water:.5,electric:.5,ice:2,rock:2,steel:.5,fairy:2},fairy:{fire:.5,fighting:2,poison:.5,dragon:2,dark:2,steel:.5}};
 const $=s=>document.querySelector(s),cap=s=>s[0].toUpperCase()+s.slice(1),w=ms=>new Promise(r=>setTimeout(r,ms)),rnd=n=>Math.floor(Math.random()*n);
-const fresh=()=>({caught:{},wins:0,gems:0,bst:{},lead:0,se:0,crit:0,ach:{}});
+const fresh=()=>({caught:{},wins:0,gems:0,bst:{},lead:0,se:0,crit:0,ach:{},diff:'normal'});
 let S;try{S=JSON.parse(localStorage.getItem('pdb'))||fresh()}catch(e){S=fresh()}
+if(S.diff!=='easy'&&S.diff!=='normal'&&S.diff!=='hard')S.diff='normal';
 const save=()=>{try{localStorage.setItem('pdb',JSON.stringify(S))}catch(e){}};
 S.skin=S.skin||{};S.gems=S.gems??0;S.bst=S.bst||{};S.mgs=S.mgs||{};let SEL=0,RF=-1,M=null,MGF=0;
 const SKINS=[['classic','Classic'],['animated','Animated'],['artwork','Artwork'],['home','3D']];
@@ -336,11 +355,11 @@ function shopGrid(){const g=$('#sgrid');if(!g||tab!='shop')return;
  g.querySelectorAll('[data-bp]').forEach(b=>b.onclick=async()=>{const id=+b.dataset.bp,r=rar(id);if(r<0||S.gems<COST[r]||S.caught[id])return;b.disabled=true;
   try{const p=await info(id);S.gems-=COST[r];S.caught[id]={n:p.name,t:p.types,b:p.bst,sk:[]};if(!S.lead)S.lead=id;jingle([72,76,79,84]);toast(p.name+' joined your collection!');missionEvent({buy:1});checkAch();save();hud();shopGrid()}catch(e){toast('Could not load Pokémon data. Try again.');b.disabled=false}});
  g.querySelectorAll('[data-bs]').forEach(b=>b.onclick=()=>{const[i,k]=b.dataset.bs.split(':'),id=+i,pr=SKINP[k];if(S.gems<pr||has(id,k))return;S.gems-=pr;S.caught[id].sk=[...(S.caught[id].sk||[]),k];jingle([72,76,79]);toast('Unlocked the '+SKN[k]+' skin for '+S.caught[id].n);missionEvent({buy:1});checkAch();save();hud();shopGrid()})}
-function mapPick(){$('#m').innerHTML='<h2 style="margin-top:0">Choose a map</h2><div class="ctl" style="margin-bottom:12px"><button class="btn" id="bk">Back</button></div>'+MAPS.map((m,i)=>`<div class="ach on" style="align-items:center;cursor:pointer;${m.special?'border-color:#f97316':''}" data-m="${i}" tabindex="0"><div style="width:56px;height:56px;border-radius:8px;background:${m.bg};border:3px solid ${m.lane}"></div><div><b>${m.n} · ${m.sz}v${m.sz}${m.special?' · Special':''}</b><div class="stats">${m.desc}</div></div></div>`).join('');
- $('#bk').onclick=render;document.querySelectorAll('[data-m]').forEach(e=>e.onclick=()=>{MI=+e.dataset.m;choose()})}
-function choose(){const ids=Object.keys(S.caught).map(Number).sort((x,y)=>x-y);
- $('#m').innerHTML='<h2 style="margin-top:0">Choose your fighter</h2><div class="ctl" style="margin-bottom:12px"><button class="btn" id="bk">Back</button></div><div class="grid" style="max-height:60vh;overflow:auto">'+ids.map(i=>{const g=S.caught[i],q=mySkin(i);return `<div class="cell got ${S.lead==i?'lead':''}" data-i="${i}">${img(i,q.s,q.sh,0)}<div>#${dn(i)}</div><div>${g.n}</div></div>`}).join('')+'</div>';
- $('#bk').onclick=render;document.querySelectorAll('.cell').forEach(e=>e.onclick=()=>start(+e.dataset.i))}
+function mapPick(){const dfr=diffOf(S);$('#m').innerHTML='<h2 style="margin-top:0">Choose a map</h2><div class="ctl" style="margin-bottom:12px"><button class="btn" id="bk">Back</button></div>'+'<div class="ctl" id="diffr" style="margin-bottom:12px">'+DIFF_IDS.map(d=>`<button class="btn ${d==dfr?'sel':''}" data-d="${d}">${DIFFS[d].label}</button>`).join('')+'</div><div class="stats" style="margin-bottom:12px">'+DIFFS[dfr].hint+'</div>'+MAPS.map((m,i)=>`<div class="ach on" style="align-items:center;cursor:pointer;${m.special?'border-color:#f97316':''}" data-m="${i}" tabindex="0"><div style="width:56px;height:56px;border-radius:8px;background:${m.bg};border:3px solid ${m.lane}"></div><div><b>${m.n} · ${m.sz}v${m.sz}${m.special?' · Special':''}</b><div class="stats">${m.desc}</div></div></div>`).join('');
+ $('#bk').onclick=render;document.querySelectorAll('[data-m]').forEach(e=>e.onclick=()=>{MI=+e.dataset.m;choose()});document.querySelectorAll('#diffr [data-d]').forEach(b=>b.onclick=()=>{S.diff=b.dataset.d;save();mapPick()})}
+function choose(){const ids=Object.keys(S.caught).map(Number).sort((x,y)=>x-y),lk=!legendaryAllowed(diffOf(S));
+ $('#m').innerHTML='<h2 style="margin-top:0">Choose your fighter</h2><div class="ctl" style="margin-bottom:12px"><button class="btn" id="bk">Back</button></div><div class="grid" style="max-height:60vh;overflow:auto">'+ids.map(i=>{const g=S.caught[i],q=mySkin(i),ld=lk&&rar(i)==4;return `<div class="cell got ${S.lead==i?'lead':''} ${lk&&rar(i)==4?'lock':''}" data-i="${i}">${img(i,q.s,q.sh,0)}<div>#${dn(i)}</div><div>${g.n}</div>${ld?'<div class="stats">Hard mode only</div>':''}</div>`}).join('')+'</div>';
+ $('#bk').onclick=render;document.querySelectorAll('.cell').forEach(e=>e.onclick=()=>{const id=+e.dataset.i;if(lk&&rar(id)==4){toast('Legendary Pokémon can only be used in Hard mode.');return}start(id)})}
 const rq=(d,r,o)=>{const a=d*Math.PI/180;return[.5+Math.cos(a)*r/2400,.5+Math.sin(a)*r/2400,o]};
 const MAPS=[
  {n:'Meadow Lane',oc:'#6b7280',ob:[[.4,.35,36,'tree'],[.4,.65,36,'tree'],[.6,.35,36,'tree'],[.6,.65,36,'tree'],[.2,.25,28,'bush'],[.2,.75,28,'bush'],[.8,.25,28,'bush'],[.8,.75,28,'bush']],sz:3,w:1400,h:640,bg:'#1f3b2c',lane:'#2a4d38',desc:'The classic 3v3 lane with six wild camps.',camps:[[.3,.17],[.3,.83],[.5,.5],[.7,.17],[.7,.83],[.5,.14]]},
@@ -352,14 +371,14 @@ const tI={},getI=u=>tI[u]||(tI[u]=Object.assign(new Image(),{src:u}));
 const KIT={normal:[['Slam','aoe','',60,5],['Quick Dash','dash','',55,6]],fire:[['Flame Burst','aoe','burn',50,6],['Fire Blast','shot','burn',75,7]],water:[['Tidal Wave','line','',70,6],['Aqua Ring','heal','',0,10]],grass:[['Vine Snare','aoe','slow',45,6],['Leech Seed','shot','drain',70,7]],electric:[['Thunder Dash','dash','stun',55,7],['Thunderbolt','line','',75,6]],ice:[['Frost Ring','aoe','slow',50,6],['Ice Shard','shot','slow',70,6]],fighting:[['Close Combat','aoe','',85,8],['Dash Punch','dash','',65,6]],poison:[['Toxic Cloud','aoe','poison',45,6],['Sludge Shot','shot','poison',65,6]],ground:[['Earthquake','aoe','stun',80,9],['Harden','shield','',0,10]],flying:[['Gust Dash','dash','',55,5],['Air Slash','line','',70,6]],psychic:[['Psywave','aoe','stun',50,8],['Calm Mind','heal','',0,10]],bug:[['Silk Shot','shot','slow',65,6],['Pin Missile','line','',70,6]],rock:[['Rock Slide','aoe','',70,7],['Stone Skin','shield','',0,9]],ghost:[['Shadow Dash','dash','',60,6],['Hex','shot','poison',70,7]],dragon:[['Dragon Rush','dash','',80,8],['Draco Burst','aoe','',85,9]],dark:[['Night Slash','line','',75,6],['Dark Pulse','aoe','stun',55,8]],steel:[['Iron Defense','shield','',0,9],['Metal Burst','aoe','',75,7]],fairy:[['Moonlight','heal','',0,10],['Dazzling Gleam','aoe','',75,8]]};
 function ST(e){const b=e.p.b,k=(1+.09*(e.lv-1))*(e.pw||1),r=e.max?e.hp/e.max:1;e.max=Math.round((b.hp*2.5+b.def+b.spd)*k);e.hp=Math.min(e.max,Math.round(e.max*r));e.atk=Math.max(b.atk,b.spa)*k;e.def=(b.def+b.spd)/2*k;e.spd=110+b.spe*.6;e.rng=b.spa>b.atk?170:75}
 function mkF(p,team,x,y,human,pw){const k=human?mySkin(p.id):{s:'classic',sh:0},e={p,team,x,y,human,pw,lv:1,xp:0,carry:0,cd:[0,0,0],ch:0,dead:0,zt:0,k:0,pts:0,im:getI(spr(p.id,k.s,k.sh,0)),slow:0,stun:0,sh:0,k1:(KIT[p.types[0]]||KIT.normal)[0],k2:(KIT[p.types[1]||p.types[0]]||KIT.normal)[1]};ST(e);e.hp=e.max;return e}
-async function start(mid){S.lead=mid;save();$('#m').innerHTML='<div class="log">Building the arena...</div>';
+async function start(mid){if(!legendaryAllowed(diffOf(S))&&rar(mid)==4){toast('Legendary Pokémon can only be used in Hard mode.');return choose()}S.lead=mid;save();$('#m').innerHTML='<div class="log">Building the arena...</div>';
  try{const me=await info(mid),near2=(f)=>Object.keys(S.bst).map(Number).filter(i=>i!=mid&&f(S.bst[i]));
   let pool=near2(v=>v>=me.bst*.8&&v<=me.bst*1.2);if(pool.length<8)pool=near2(v=>Math.abs(v-me.bst)<me.bst*.4);
   const mp=MAPS[MI],n=mp.sz;AW=mp.w;AH=mp.h;
-  const pk=()=>pool.length>5?pool[rnd(pool.length)]:1+rnd(TOTAL),ps=[me,...await Promise.all(Array.from({length:2*n-1},pk).map(info))];
+  const pk=()=>pool.length>5?pool[rnd(pool.length)]:1+rnd(TOTAL),dfr=diffOf(S),ids=Array.from({length:2*n-1},pk);if(DIFFS[dfr].leg)ids[n-1]=[...LEG][rnd(LEG.size)];const ps=[me,...await Promise.all(ids.map(info))];
   const pw=(p,d)=>Math.max(.4,Math.min(1.5,me.bst/p.bst))*d,ys=Array.from({length:n},(_,i)=>AH*(i+1)/(n+1)),hi=Math.floor(n/2),sl=[hi,...ys.map((_,k)=>k).filter(k=>k!=hi)];
   const pos=(t,k)=>{if(!mp.ring)return[t?AW-120:120,ys[k]];const a=(t?0:Math.PI)+(k-(n-1)/2)*.15*(t?1:-1),r=740+(k%2?55:-55);return[AW/2+r*Math.cos(a),AH/2+r*Math.sin(a)]};
-  M={mp,f:ps.map((p,i)=>{const t=i<n?0:1,j=t?i-n:i,[x,y]=pos(t,t?j:sl[j]);return mkF(p,t,x,y,i==0,i==0?1:pw(p,1))}),
+  M={mp,f:ps.map((p,i)=>{const t=i<n?0:1,j=t?i-n:i,[x,y]=pos(t,t?j:sl[j]);return mkF(p,t,x,y,i==0,i==0?1:pw(p,1)*(t?enemyPower(dfr):1))}),
    ob:mp.ob.map(([fx,fy,r,t])=>({x:AW*fx,y:AH*fy,r,t,c:t=='geyser'?Math.random()*9:0})),gas:(mp.gas||[]).map(([fx,fy,r])=>({x:AW*fx,y:AH*fy,r})),lava:(mp.lava||[]).map(([fx,fy,r])=>({x:AW*fx,y:AH*fy,r})),
    w:mp.camps.map(([fx,fy])=>({wild:1,id:WID[rnd(WID.length)],x:AW*fx,y:AH*fy,hp:300,max:300,def:60,atk:25,dead:0,resp:0,cd:0,team:2})),t:mp.time||150,sc:[0,0],fx:[],keys:{},last:0,over:0,ring:mp.ring?{x:AW/2,y:AH/2,ro:mp.ring.ro,ri:mp.ring.ri}:null,gr:mp.ring?110:80,gl:mp.ring?[[AW/2-740,AH/2],[AW/2+740,AH/2]]:[[50,AH/2],[AW-50,AH/2]],sp:mp.ring?[[AW/2-740,AH/2],[AW/2+740,AH/2]]:[[120,AH/2],[AW-120,AH/2]]};
   tab='battle';render()}
@@ -404,10 +423,10 @@ function goTo(e,x,y,dt,stop){const dx=x-e.x,dy=y-e.y,d=Math.hypot(dx,dy),sp=e.sp
 function ringPath(e,tx,ty){const R=M.ring,px=e.x,py=e.y,dx=tx-px,dy=ty-py,l2=dx*dx+dy*dy||1,tt=Math.max(0,Math.min(1,((R.x-px)*dx+(R.y-py)*dy)/l2)),cd=Math.hypot(px+dx*tt-R.x,py+dy*tt-R.y);
  if(cd>R.ri+90)return[tx,ty];const ae=Math.atan2(py-R.y,px-R.x),at=Math.atan2(ty-R.y,tx-R.x);let da=at-ae;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
  const a=ae+Math.sign(da||1)*Math.min(Math.abs(da),.6),r=Math.max(R.ri+130,Math.min(R.ro-90,Math.hypot(px-R.x,py-R.y)));return[R.x+r*Math.cos(a),R.y+r*Math.sin(a)]}
-function ai(e,dt){const lv=[...M.lava,...M.gas].find(l=>Math.hypot(e.x-l.x,e.y-l.y)<l.r);if(lv){goTo(e,e.x+(e.x-lv.x),e.y+(e.y-lv.y),dt,5);return}if(M.ring&&Math.hypot(e.x-M.ring.x,e.y-M.ring.y)<M.ring.ri+60){goTo(e,e.x+(e.x-M.ring.x),e.y+(e.y-M.ring.y),dt,5);return}const en=foes(e),goal=M.gl[e.team?0:1];let mv;const t=near(e,en,260);
- const gb=M.gl[e.team],inb=Math.hypot(e.x-gb[0],e.y-gb[1])<M.gr;if((e.hp<e.max*.3||(inb&&e.hp<e.max*.8))&&!e.carry)mv=[...M.sp[e.team],20];else if(e.carry>=6||(e.carry&&M.t<25))mv=[goal[0],goal[1],20];else if(t)mv=[t.x,t.y,e.rng*.8];
+function ai(e,dt){const rt=retreatAt(diffOf(S)),ra=aiRates(diffOf(S)),lv=[...M.lava,...M.gas].find(l=>Math.hypot(e.x-l.x,e.y-l.y)<l.r);if(lv){goTo(e,e.x+(e.x-lv.x),e.y+(e.y-lv.y),dt,5);return}if(M.ring&&Math.hypot(e.x-M.ring.x,e.y-M.ring.y)<M.ring.ri+60){goTo(e,e.x+(e.x-M.ring.x),e.y+(e.y-M.ring.y),dt,5);return}const en=foes(e),goal=M.gl[e.team?0:1];let mv;const t=near(e,en,260);
+ const gb=M.gl[e.team],inb=Math.hypot(e.x-gb[0],e.y-gb[1])<M.gr;if((e.hp<e.max*rt||(inb&&e.hp<e.max*(rt+.5)))&&!e.carry)mv=[...M.sp[e.team],20];else if(e.carry>=6||(e.carry&&M.t<25))mv=[goal[0],goal[1],20];else if(t)mv=[t.x,t.y,e.rng*.8];
  else{const q=near(e,wilds(),2000);mv=q?[q.x,q.y,e.rng*.8]:[AW/2,AH/2,20]}
- if(M.ring){const w2=ringPath(e,mv[0],mv[1]);mv[0]=w2[0];mv[1]=w2[1]}goTo(e,mv[0],mv[1],dt,mv[2]);const tg=near(e,[...en,...wilds()],e.rng+10);if(tg){basic(e,tg);if(Math.random()<.02)skill(e,2,tg);if(Math.random()<.015)skill(e,1);if(e.ch>=100&&en.length&&Math.random()<.05)unite(e)}}
+ if(M.ring){const w2=ringPath(e,mv[0],mv[1]);mv[0]=w2[0];mv[1]=w2[1]}goTo(e,mv[0],mv[1],dt,mv[2]);const tg=near(e,[...en,...wilds()],e.rng+10);if(tg){basic(e,tg);if(Math.random()<ra[1])skill(e,2,tg);if(Math.random()<ra[0])skill(e,1);if(e.ch>=100&&en.length&&Math.random()<ra[2])unite(e)}}
 function upd(dt){const k=M.keys;M.t-=dt;
  M.f.forEach(e=>{e.cd=e.cd.map(c=>c-dt);potionTick(e,dt);if(e.dead){e.dead-=dt;if(e.dead<=0){e.dead=0;e.hp=e.max;e.x=M.sp[e.team][0];e.y=M.sp[e.team][1]}return}
   if(M.ring&&Math.hypot(e.x-M.ring.x,e.y-M.ring.y)<M.ring.ri){M.fx.push({x:e.x,y:e.y-40,t:1.2,s:'Fell into the volcano!',c:'#f97316'});ko({},e);return}
@@ -504,7 +523,7 @@ function inv(){const ids=Object.keys(S.caught).map(Number).sort((a,b)=>(S.caught
  $('#m').innerHTML=itemsSection()+'<div class="stats" style="margin-bottom:12px">Earn battle points by playing matches with a Pokémon. 30,000 unlocks the Artwork skin and a green ribbon, 80,000 the 3D skin and a blue ribbon, and 230,000 the Shiny skin and a golden ribbon.</div>'+
  ids.map(i=>{const c=S.caught[i],bp=c.bp||0,k=mySkin(i),got=MS.filter(m=>bp>=m[0]),nx=MS.find(m=>bp<m[0]),lo=got.length?got[got.length-1][0]:0;
   return `<div class="ach on inv" style="align-items:center">${img(i,k.s,k.sh,0,c.n)}<div style="flex:1"><b>#${dn(i)} ${c.n}</b>${got.map(m=>`<span style="background:${m[4]};color:#111;border-radius:10px;padding:1px 8px;font-size:12px;margin-left:6px">${m[3]}</span>`).join('')}<div class="stats">${bp.toLocaleString()} battle points${nx?' · next: '+nx[3]+' at '+nx[0].toLocaleString():' · all ribbons earned'}</div>${nx?`<div class="bar"><i style="width:${100*(bp-lo)/(nx[0]-lo)}%;background:${nx[4]}"></i></div>`:''}</div></div>`}).join('')+saveSection();wireSave();wireItems()}
-function endM(){const me=M.f[0],win=M.sc[0]>M.sc[1],dr=M.sc[0]==M.sc[1],g=win?15:10;M.over=1;S.gems+=g;if(win)S.wins++;S.pts=(S.pts||0)+me.pts;const bb=boostBattle(S,win?100:50),bp=bb.bp,un=award(me.p.id,bp),drop=win&&boostDrop(S);missionEvent({play:1,win:win?1:0,kills:me.k,pts:me.pts,wild:me.wk||0});checkAch();save();jingle(win?[67,72,76,79,84]:[67,64,60]);if(win)confetti();
+function endM(){const me=M.f[0],win=M.sc[0]>M.sc[1],dr=M.sc[0]==M.sc[1],dfr=diffOf(S),g=matchGems(dfr,win);M.over=1;S.gems+=g;if(win)S.wins++;S.pts=(S.pts||0)+me.pts;const bb=boostBattle(S,matchPoints(dfr,win)),bp=bb.bp,un=award(me.p.id,bp),drop=win&&boostDrop(S);missionEvent({play:1,win:win?1:0,kills:me.k,pts:me.pts,wild:me.wk||0});checkAch();save();jingle(win?[67,72,76,79,84]:[67,64,60]);if(win)confetti();
  $('#m').innerHTML=`<div class="panel"><div><h2 style="margin:0 0 6px">${win?'Victory!':dr?'Draw':'Defeat'}</h2><div>Final score ${M.sc[0]} – ${M.sc[1]}. You scored ${me.pts} points and defeated ${me.k} opponents.</div><div style="margin:8px 0">You earned 💎 ${g}.</div><div>${me.p.name} earned ${bp.toLocaleString()} battle points (total ${S.caught[me.p.id].bp.toLocaleString()}).${bb.boosted?' Points Booster ×2 — '+bb.left+' battle'+(bb.left==1?'':'s')+' left.':''}</div>${un.map(u=>`<div style="color:#fbbf24;font-weight:700;margin-top:4px">Unlocked: ${u}!</div>`).join("")}${drop?'<div style="color:#fbbf24;font-weight:700;margin-top:4px">🎁 You found a Points Booster! Use it from Inventory → My items.</div>':''}<div style="height:8px"></div><button class="btn" id="pa">Back to menu</button></div></div>`;$('#pa').onclick=()=>{M=null;render()}}
 const kn=e=>{const a=[(e.key||'').toLowerCase()];if(e.code&&e.code.startsWith('Key'))a.push(e.code.slice(3).toLowerCase());if(e.code=='Space')a.push(' ');return a};
 const hkDown={},hkSt={t:0,fired:false};let hkIv=0,hkLast=0;
