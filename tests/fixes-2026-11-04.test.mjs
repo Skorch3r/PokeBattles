@@ -22,3 +22,13 @@ test('shop_search_escapes_quotes_and_ampersands', () => {
   assert.ok(main.includes("SH.q.replace(/&/g,'&amp;').replace(/\"/g,'&quot;')"), 'attribute-safe escape chain (& first)');
   assert.ok(!main.includes("SH.q.replace(/\"/g,'')"), 'old quote-stripping must be gone');
 });
+
+// B4 — the match canvas is blurry on HiDPI: backing store must follow devicePixelRatio
+const matchRegion = main.slice(main.indexOf('function matchView('), main.indexOf('function loop('));
+const drawRegion = main.slice(main.indexOf('function draw('), main.indexOf('function matchView('));
+test('match_canvas_scales_by_devicePixelRatio', () => {
+  assert.ok(matchRegion.includes('devicePixelRatio'), 'matchView reads devicePixelRatio');
+  assert.ok(matchRegion.includes('cv.width=900*dpr'), 'backing store assignment');
+  assert.ok(drawRegion.includes('c.setTransform(dpr,0,0,dpr,0,0)'), 'draw() reapplies the transform each frame');
+  assert.ok(!html.includes('width="900"'), 'fixed-size canvas attributes removed from the template');
+});
