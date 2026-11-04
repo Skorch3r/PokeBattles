@@ -531,7 +531,7 @@ function doImport(text){
  if(!r.ok){toast(SAVE_ERR[r.error]||SAVE_ERR.format);return}
  const cur={gems:S.gems,caught:Object.keys(S.caught).length,wins:S.wins};
  if(!confirm('Replace your progress?\n\nCurrent: '+cur.gems+' gems, '+cur.caught+' Pokémon, '+cur.wins+' wins\nImported: '+r.summary.gems+' gems, '+r.summary.caught+' Pokémon, '+r.summary.wins+' wins (saved '+(r.summary.saved||'unknown date').slice(0,10)+')\n\nThis cannot be undone.')){toast('Import cancelled — nothing changed.');return}
- S=applyImportState(S,r.state);SEL=0;Object.entries(S.mgs).forEach(([i,m])=>NAMES[i]=m.n);
+ S=applyImportState(r.state);SEL=0;Object.entries(S.mgs).forEach(([i,m])=>NAMES[i]=m.n);
  save();musLabel();render();toast('Imported! '+r.summary.gems+' gems · '+r.summary.caught+' Pokémon · '+r.summary.wins+' wins');
  if(!scanning)scan()}
 function inv(){const ids=Object.keys(S.caught).map(Number).sort((a,b)=>(S.caught[b].bp||0)-(S.caught[a].bp||0));

@@ -182,6 +182,10 @@ test('import_ui_wiring', () => {
   assert.ok(doImportFull.includes('confirm('), 'doImport must confirm before replacing');
   // the confirm must come before the state is replaced
   assert.ok(doImportFull.indexOf('confirm(') < doImportFull.indexOf('S=applyImportState('));
+  // regression pin (found by the G10 QA gate): the cleanup refactor made applyImportState 1-arg
+  // but left the 2-arg call, silently turning import into a no-op
+  assert.ok(doImportFull.includes('S=applyImportState(r.state)'), 'import must apply the parsed state, not the current one');
+  assert.ok(!doImportFull.includes('applyImportState(S,'), 'old 2-arg call must stay gone');
 });
 test('load_path_untouched', () => {
   assert.ok(main.includes("let S;try{S=JSON.parse(localStorage.getItem('pdb'))||fresh()}catch(e){S=fresh()}"));
