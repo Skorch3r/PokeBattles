@@ -5,7 +5,7 @@ Last updated: 2026-11-04
 ## Where things stand
 
 - The game is one file, `index.html` — the single source of truth. The old identical mirror copy `pokedex-battler.html` was deleted in the code cleanup (see Code cleanup below); don't recreate it.
-- Tests live in `tests/` and run with `node --test "tests/*.test.mjs"` (104 checks, all passing when last run). Browser checks were run separately in a headless browser and are not part of the repo.
+- Tests live in `tests/` and run with `node --test "tests/*.test.mjs"` (111 checks, all passing when last run). Browser checks were run separately in a headless browser and are not part of the repo.
 - Docs for the save feature are in `docs/superpowers/` (plan and spec).
 - On GitHub: https://github.com/Skorch3r/PokeBattles. After changing the game, save it with `git add .`, `git commit -m "..."` and `git push` in PowerShell.
 
