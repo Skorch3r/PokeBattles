@@ -174,3 +174,15 @@ test('load_path_untouched', () => {
   assert.ok(main.includes("const save=()=>{try{localStorage.setItem('pdb',JSON.stringify(S))}catch(e){}};"));
   assert.ok(main.includes('S.skin=S.skin||{};S.gems=S.gems??0;S.bst=S.bst||{};S.mgs=S.mgs||{};'));
 });
+
+// ---------- Difficulty Task 2: optional diff field ----------
+test('diff_field_validation_and_import_default', () => {
+  const base = { caught: {}, ach: {}, gems: 0, wins: 0 };
+  assert.notEqual(validateSaveState({ ...base, diff: 'easy' }), null);
+  assert.notEqual(validateSaveState({ ...base, diff: 'hard' }), null);
+  assert.equal(validateSaveState({ ...base, diff: 'zzz' }), null);
+  assert.equal(validateSaveState({ ...base, diff: 7 }), null);
+  assert.equal(applyImportState(base, {}).diff, 'normal', 'missing diff imports as normal');
+  assert.equal(applyImportState(base, { diff: 'hard' }).diff, 'hard');
+  assert.equal(applyImportState(base, { diff: 'zzz' }).diff, 'normal');
+});

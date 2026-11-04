@@ -43,3 +43,8 @@ test('accessors_index_the_table', () => {
   assert.deepEqual(aiRates('easy'), [.01, .0075, .02]);
   assert.equal(retreatAt('normal'), .3);
 });
+test('fresh_and_load_default_to_normal', () => {
+  const main = html.slice(html.lastIndexOf('<script>'));
+  assert.ok(main.includes("diff:'normal'"), 'fresh() starts saves on normal');
+  assert.ok(main.includes("S.diff!=='easy'&&S.diff!=='normal'&&S.diff!=='hard'"), 'load path repairs missing/invalid diff');
+});
