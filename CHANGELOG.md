@@ -4,8 +4,8 @@ Last updated: 2026-11-04
 
 ## Where things stand
 
-- The game is one file, `index.html`. `pokedex-battler.html` is an identical copy; keep the two in sync (or delete one).
-- Tests live in `tests/` and run with `node --test "tests/*.test.mjs"` (98 checks, all passing when last run). Browser checks were run separately in a headless browser and are not part of the repo.
+- The game is one file, `index.html` — the single source of truth. The old identical mirror copy `pokedex-battler.html` was deleted in the code cleanup (see Code cleanup below); don't recreate it.
+- Tests live in `tests/` and run with `node --test "tests/*.test.mjs"` (104 checks, all passing when last run). Browser checks were run separately in a headless browser and are not part of the repo.
 - Docs for the save feature are in `docs/superpowers/` (plan and spec).
 - On GitHub: https://github.com/Skorch3r/PokeBattles. After changing the game, save it with `git add .`, `git commit -m "..."` and `git push` in PowerShell.
 
@@ -56,6 +56,17 @@ Last updated: 2026-11-04
 ### Pokédex
 - No shortcuts to the Shop any more; buying happens only in the Shop tab. Prices are still shown as information.
 
+## Code cleanup (2026-11-04)
+
+A zero-behavior-change cleanup pass (spec: `docs/superpowers/specs/2026-11-04-code-cleanup-design.md`); the test suite stayed green throughout.
+
+- **Files removed:** `pokedex-battler.html` (stale full duplicate of the game — the "keep or delete" question was decided: delete; `index.html` alone is the source of truth) and `STUDIO-SMOKE.md` (leftover test file).
+- **Dead battle code removed:** leftovers from the old turn-based battle — `mk()` (including its never-saved `heals:3` field), `cap`, `w`, `log()`, `bars()`, the unused `B` variable, the old battle CSS (`.arena`, `.mon`, `.foe`, `.me`, `.card`, the `max-width:560px` media rule) and the `#arena` box from the battle view. The `#log` intro text stays, and `.bar` CSS stays (missions progress bars use it).
+- **`DIFF_IDS` reuse:** the `<script id="difficulty">` block moved to the top of the script order, and the three hardcoded `['easy','normal','hard']` lists (save validation, import normalization, load-path repair) now reuse `DIFF_IDS` — one list instead of four.
+- **Unused parameters dropped:** `cdi` in `burst()`, `prevS` in `applyImportState()` (now single-argument), `d` in `pw()`.
+- **`nm` unshadowed:** the global name formatter `nm` is no longer shadowed by locals — renamed to `mvName` in `skill()`, `fname` in `rosterDraw()` and `label` in the HUD key badges.
+- **Merged duplicates:** `SKN` is now derived from `SKINS` (minus classic, plus shiny) instead of a hand-maintained copy; the two `.cell img` CSS rules became one; the two window key/blur listener sets merged into one keydown/keyup/blur (hold-keys tracking still works outside matches; match keys apply only while a match is active); a match end now writes to localStorage once instead of three times (`checkAch()` and `missionEvent()` take an optional `quiet` flag).
+
 ## Numbers you may want to tune
 
 | What | Value | Where in `index.html` |
@@ -72,7 +83,7 @@ Last updated: 2026-11-04
 | AI skill/Unite usage rates | easy 1%/0.75%/2% · normal 2%/1.5%/5% · hard 5%/4%/12% | `DIFFS[*].ai` in `<script id="difficulty">` |
 | Enemy retreat threshold | 15% / 30% / 40% max HP | `DIFFS[*].retreat` in `<script id="difficulty">` |
 | Gems & points per difficulty | gems 10/10, 20/15, 30/25 · points 80/40, 100/50, 140/90 | `DIFFS[*].gems`, `DIFFS[*].points` in `<script id="difficulty">` |
-| Adding a difficulty level | change all four hardcoded `['easy','normal','hard']` lists | `DIFF_IDS` (difficulty script), `validateSaveState`, `applyImportState`, and the load-path repair line after `fresh()` |
+| Adding a difficulty level | add the id to `DIFF_IDS` and a `DIFFS` entry | `<script id="difficulty">` (single source after the cleanup) |
 
 ## Choices made on your behalf (easy to change)
 
@@ -85,6 +96,4 @@ Last updated: 2026-11-04
 
 ## Loose ends
 
-- Decide whether to keep or delete `pokedex-battler.html`.
-- `STUDIO-SMOKE.md` looks like a leftover test file.
 - During this work the files in the folder were twice rolled back by something other than my edits. If changes ever disappear, check for another tool, sync or session working in the same folder.
