@@ -42,14 +42,12 @@ test('unused_params_are_gone_and_nm_is_unshadowed', () => {
 });
 
 // E4 (POK-16) merges the two window listener sets and adds the quiet save path.
-// Those pins are pre-written here and activate when that task lands; skipping
-// them keeps this suite green at E1 without trampling E4's scope.
-test('exactly_one_window_keydown_keyup_blur_listener_each', { skip: 'lands in E4 (POK-16): merge the two listener sets' }, () => {
+test('exactly_one_window_keydown_keyup_blur_listener_each', () => {
   for (const ev of ['keydown', 'keyup', 'blur'])
     assert.equal((html.match(new RegExp(`addEventListener\\('${ev}'`, 'g')) || []).length, 1, `exactly one window ${ev} listener after the merge`);
 });
 
-test('endM_quiet_calls_skip_internal_saves', { skip: 'lands in E4 (POK-16): checkAch(quiet)/missionEvent(ev,quiet)' }, () => {
+test('endM_quiet_calls_skip_internal_saves', () => {
   assert.ok(/missionEvent\(\{[^}]*\},true\)/.test(html), 'endM passes quiet=true to missionEvent');
   assert.ok(html.includes('checkAch(true)'), 'endM passes quiet=true to checkAch');
 });

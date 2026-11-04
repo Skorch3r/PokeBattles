@@ -18,11 +18,11 @@ nav button.on{background:var(--red);border-color:var(--red)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
 .cell{background:var(--panel);border:2px solid var(--line);border-radius:8px;text-align:center;font-size:11px;padding:4px;cursor:pointer;color:var(--mute)}
 .cell.got{border-color:var(--gold);color:var(--tx)}.cell.lead{background:#3a2a2a;border-color:var(--red)}
-.cell img{width:64px;height:64px;image-rendering:pixelated}.cell:not(.got) img{filter:brightness(0) opacity(.5)}
+.cell img{width:64px;height:64px;image-rendering:pixelated;object-fit:contain}.cell:not(.got) img{filter:brightness(0) opacity(.5)}
 .ach{display:flex;gap:12px;padding:10px 12px;margin-bottom:8px;border:2px solid var(--line);border-radius:8px;background:var(--panel);opacity:.55}
 .ach.on{opacity:1;border-color:var(--gold)}.ach b{display:block}
 #toast{z-index:60;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--gold);color:#222;font-weight:800;padding:10px 18px;border-radius:8px;display:none}
-.shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.card2{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}.card2 img{width:96px;height:96px;object-fit:contain;image-rendering:pixelated}.card2 .btn{width:100%;padding:6px 8px}input.btn{font-weight:400;min-width:160px}.inv img{width:72px;height:72px;object-fit:contain}.panel{display:flex;gap:16px;align-items:center;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px}.panel img{width:120px;height:120px;object-fit:contain}.btn.sel{border-color:var(--gold);background:#3a3320}.cell img{object-fit:contain}.cell.cur{outline:2px solid #fff}.cell.lock{opacity:.45}.cell.mg{box-shadow:inset 0 0 0 2px #c084fc}select.btn{padding:8px}
+.shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.card2{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}.card2 img{width:96px;height:96px;object-fit:contain;image-rendering:pixelated}.card2 .btn{width:100%;padding:6px 8px}input.btn{font-weight:400;min-width:160px}.inv img{width:72px;height:72px;object-fit:contain}.panel{display:flex;gap:16px;align-items:center;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px}.panel img{width:120px;height:120px;object-fit:contain}.btn.sel{border-color:var(--gold);background:#3a3320}.cell.cur{outline:2px solid #fff}.cell.lock{opacity:.45}.cell.mg{box-shadow:inset 0 0 0 2px #c084fc}select.btn{padding:8px}
 .pick{display:flex;gap:12px;flex-wrap:wrap}.pick .btn{display:flex;flex-direction:column;align-items:center}.pick img{width:96px;height:96px;image-rendering:pixelated}
 @media(prefers-reduced-motion:reduce){.bar i{transition:none}}
 </style></head><body>
@@ -280,7 +280,7 @@ const ACH=[
 ['Ribbon winner','Earn a ribbon with any Pokémon',()=>Object.values(S.caught).some(c=>(c.rb||[]).length)],
 ['Mega collector','Own a Mega Pokémon',()=>Object.keys(S.caught).some(i=>S.mgs[i])],
 ['Rainbow','Own Pokémon of all 18 types',()=>new Set(Object.values(S.caught).flatMap(c=>c.t)).size>=18]];
-function checkAch(){ACH.forEach(([n,d,f])=>{if(!S.ach[n]&&f()){S.ach[n]=1;toast('Achievement: '+n)}});save()}
+function checkAch(quiet){ACH.forEach(([n,d,f])=>{if(!S.ach[n]&&f()){S.ach[n]=1;toast('Achievement: '+n)}});if(!quiet)save()}
 function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
 async function info(id){if(cache[id])return cache[id];const d=await(await fetch(API+'pokemon/'+id)).json(),g=n=>d.stats.find(s=>s.stat.name==n).base_stat;
  const b={hp:g('hp'),atk:g('attack'),def:g('defense'),spa:g('special-attack'),spd:g('special-defense'),spe:g('speed')};
@@ -324,7 +324,7 @@ function battleView(){
  M?matchView():idle()}
 function idle(){$('#ctl').innerHTML='<button class="btn" id="go">Start a match</button>';$('#go').onclick=mapPick}
 let SH={t:'poke',rf:-1,q:'',n:60,sk:'all'};
-const SKN={animated:'Animated',artwork:'Artwork',home:'3D',shiny:'Shiny ✨'};
+const SKN={...Object.fromEntries(SKINS.filter(([k])=>k!='classic').map(([k,l])=>[k,l])),shiny:'Shiny ✨'};
 function shop(){const T=[['poke','Pokémon'],['mega','Mega Pokémon'],['skin','Skins']];
  $('#m').innerHTML=`<div class="ctl" style="margin-bottom:10px">${T.map(([k,l])=>`<button class="btn ${SH.t==k?'sel':''}" data-st="${k}">${l}</button>`).join('')}</div>
  <div class="ctl" style="margin-bottom:12px">${SH.t=='skin'?`<select class="btn" id="skf" aria-label="Skin filter"><option value="all">All skins</option>${Object.keys(SKN).map(k=>`<option value="${k}" ${SH.sk==k?'selected':''}>${SKN[k]} (💎${SKINP[k]})</option>`).join('')}</select>`:`<select class="btn" id="rf2" aria-label="Rarity filter"><option value="-1">All rarities</option>${RN.map((n,i)=>`<option value="${i}" ${SH.rf==i?'selected':''}>${n} (💎${COST[i]})</option>`).join('')}</select>`}<input class="btn" id="sq" type="search" placeholder="Search by name" value="${SH.q.replace(/"/g,'')}"></div><div id="sgrid"></div>`;
@@ -472,7 +472,7 @@ const MS=[[30000,'artwork','green','Green ribbon','#4ade80','Artwork'],[80000,'h
 function award(id,bp){const c=S.caught[id];c.bp=(c.bp||0)+bp;c.rb=c.rb||[];c.sk=c.sk||[];const m=[];
  MS.forEach(([n,sk,rb,l,col,sn])=>{if(c.bp>=n&&!c.rb.includes(rb)){c.rb.push(rb);if(!c.sk.includes(sk))c.sk.push(sk);m.push(`${l} and the ${sn} skin for ${c.n}`)}});return m}
 const mis=()=>{S.mis=misNormalize(S.mis);misReset(S.mis,Date.now());return S.mis};
-function missionEvent(ev){const done=misEvent(mis(),ev);save();hud();if(done.length)toast('Mission complete: '+MT[done[0]].t+' — claim it in Missions')}
+function missionEvent(ev,quiet){const done=misEvent(mis(),ev);if(!quiet)save();hud();if(done.length)toast('Mission complete: '+MT[done[0]].t+' — claim it in Missions')}
 function claimMis(i){const r=misClaim(mis(),i);if(!r)return;S.gems+=r.gems;save();hud();jingle(r.level?[72,76,79,84]:[72,76]);
  toast('Mission complete! +💎'+r.mission+(r.level?' · Path level '+r.level+'! +💎'+r.levelGems:'')+(r.prize?' · Choose your 3D skin prize!':''));missions()}
 function missions(){const m=mis(),lv=misLevel(m.done),inLv=m.done%MIS_PER_LEVEL,full=lv>=MIS_MAXLV,nx=lv+1,left=MIS_PER_LEVEL-inLv;
@@ -513,7 +513,7 @@ function inv(){const ids=Object.keys(S.caught).map(Number).sort((a,b)=>(S.caught
  $('#m').innerHTML=itemsSection()+'<div class="stats" style="margin-bottom:12px">Earn battle points by playing matches with a Pokémon. 30,000 unlocks the Artwork skin and a green ribbon, 80,000 the 3D skin and a blue ribbon, and 230,000 the Shiny skin and a golden ribbon.</div>'+
  ids.map(i=>{const c=S.caught[i],bp=c.bp||0,k=mySkin(i),got=MS.filter(m=>bp>=m[0]),nx=MS.find(m=>bp<m[0]),lo=got.length?got[got.length-1][0]:0;
   return `<div class="ach on inv" style="align-items:center">${img(i,k.s,k.sh,0,c.n)}<div style="flex:1"><b>#${dn(i)} ${c.n}</b>${got.map(m=>`<span style="background:${m[4]};color:#111;border-radius:10px;padding:1px 8px;font-size:12px;margin-left:6px">${m[3]}</span>`).join('')}<div class="stats">${bp.toLocaleString()} battle points${nx?' · next: '+nx[3]+' at '+nx[0].toLocaleString():' · all ribbons earned'}</div>${nx?`<div class="bar"><i style="width:${100*(bp-lo)/(nx[0]-lo)}%;background:${nx[4]}"></i></div>`:''}</div></div>`}).join('')+saveSection();wireSave();wireItems()}
-function endM(){const me=M.f[0],win=M.sc[0]>M.sc[1],dr=M.sc[0]==M.sc[1],dfr=diffOf(S),g=matchGems(dfr,win);M.over=1;S.gems+=g;if(win)S.wins++;S.pts=(S.pts||0)+me.pts;const bb=boostBattle(S,matchPoints(dfr,win)),bp=bb.bp,un=award(me.p.id,bp),drop=win&&boostDrop(S);missionEvent({play:1,win:win?1:0,kills:me.k,pts:me.pts,wild:me.wk||0});checkAch();save();jingle(win?[67,72,76,79,84]:[67,64,60]);if(win)confetti();
+function endM(){const me=M.f[0],win=M.sc[0]>M.sc[1],dr=M.sc[0]==M.sc[1],dfr=diffOf(S),g=matchGems(dfr,win);M.over=1;S.gems+=g;if(win)S.wins++;S.pts=(S.pts||0)+me.pts;const bb=boostBattle(S,matchPoints(dfr,win)),bp=bb.bp,un=award(me.p.id,bp),drop=win&&boostDrop(S);missionEvent({play:1,win:win?1:0,kills:me.k,pts:me.pts,wild:me.wk||0},true);checkAch(true);save();jingle(win?[67,72,76,79,84]:[67,64,60]);if(win)confetti();
  $('#m').innerHTML=`<div class="panel"><div><h2 style="margin:0 0 6px">${win?'Victory!':dr?'Draw':'Defeat'}</h2><div>Final score ${M.sc[0]} – ${M.sc[1]}. You scored ${me.pts} points and defeated ${me.k} opponents.</div><div style="margin:8px 0">You earned 💎 ${g}.</div><div>${me.p.name} earned ${bp.toLocaleString()} battle points (total ${S.caught[me.p.id].bp.toLocaleString()}).${bb.boosted?' Points Booster ×2 — '+bb.left+' battle'+(bb.left==1?'':'s')+' left.':''}</div>${un.map(u=>`<div style="color:#fbbf24;font-weight:700;margin-top:4px">Unlocked: ${u}!</div>`).join("")}${drop?'<div style="color:#fbbf24;font-weight:700;margin-top:4px">🎁 You found a Points Booster! Use it from Inventory → My items.</div>':''}<div style="height:8px"></div><button class="btn" id="pa">Back to menu</button></div></div>`;$('#pa').onclick=()=>{M=null;render()}}
 const kn=e=>{const a=[(e.key||'').toLowerCase()];if(e.code&&e.code.startsWith('Key'))a.push(e.code.slice(3).toLowerCase());if(e.code=='Space')a.push(' ');return a};
 const hkDown={},hkSt={t:0,fired:false};let hkIv=0,hkLast=0;
@@ -521,12 +521,9 @@ const hkAll=()=>HK_KEYS.every(k=>hkDown[k]);
 function hkCheck(){if(!hkAll()){holdUpdate(hkSt,false,0);return}if(hkIv)return;hkLast=performance.now();
  hkIv=setInterval(()=>{const n=performance.now(),dt=(n-hkLast)/1000;hkLast=n;const held=hkAll();if(holdUpdate(hkSt,held,dt))confetti();if(!held){clearInterval(hkIv);hkIv=0}},100)}
 const hkClear=()=>{HK_KEYS.forEach(k=>delete hkDown[k]);hkCheck()};
-addEventListener('keydown',e=>{kn(e).forEach(k=>{if(HK_KEYS.includes(k))hkDown[k]=1});hkCheck()});
-addEventListener('keyup',e=>{kn(e).forEach(k=>delete hkDown[k]);hkCheck()});
-addEventListener('blur',hkClear);document.addEventListener('visibilitychange',()=>{if(document.hidden)hkClear()});
-addEventListener('keydown',e=>{if(!M||M.over)return;const a=kn(e);a.forEach(k=>M.keys[k]=1);if(a.some(k=>NOKEY.includes(k)))e.preventDefault()});
-addEventListener('keyup',e=>{if(M)kn(e).forEach(k=>M.keys[k]=0)});
-addEventListener('blur',()=>{if(M)M.keys={}});
+addEventListener('keydown',e=>{const a=kn(e);a.forEach(k=>{if(HK_KEYS.includes(k))hkDown[k]=1;if(M&&!M.over)M.keys[k]=1});hkCheck();if(M&&!M.over&&a.some(k=>NOKEY.includes(k)))e.preventDefault()});
+addEventListener('keyup',e=>{kn(e).forEach(k=>{delete hkDown[k];if(M)M.keys[k]=0});hkCheck()});
+addEventListener('blur',()=>{hkClear();if(M)M.keys={}});document.addEventListener('visibilitychange',()=>{if(document.hidden)hkClear()});
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{M=null;tab=b.dataset.t;render()});
 ['click','touchend','keydown'].forEach(ev=>document.addEventListener(ev,e=>{if(!e.target||e.target.id!='mus')initAudio()}));
 $('#mus').onclick=()=>{const running=ctx&&ctx.state=='running'&&timer;if(!running&&!S.mute){initAudio();return}S.mute=!S.mute;save();if(S.mute){stopM()}else{initAudio();play(cur,1)}musLabel()};

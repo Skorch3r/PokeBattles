@@ -110,7 +110,7 @@ test('missions_ui_wiring', () => {
 });
 test('mission_events_are_hooked', () => {
   const endM = main.slice(main.indexOf('function endM('), main.indexOf('\n', main.indexOf('function endM(')));
-  assert.ok(endM.includes('missionEvent({play:1,win:win?1:0,kills:me.k,pts:me.pts,wild:me.wk||0})'), 'endM reports the match');
+  assert.ok(endM.includes('missionEvent({play:1,win:win?1:0,kills:me.k,pts:me.pts,wild:me.wk||0},true)'), 'endM reports the match (quiet — endM keeps the single explicit save)');
   assert.ok(main.includes("a.wk=(a.wk||0)+1;gain(a,70)"), 'wild defeats are counted in ko()');
   assert.equal((main.match(/missionEvent\(\{buy:1\}\)/g) || []).length, 2, 'Pokémon purchase + skin purchase');
 });

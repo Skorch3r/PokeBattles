@@ -31,9 +31,9 @@ test('can_fire_again_after_a_release', () => {
 
 const main = html.slice(html.lastIndexOf('<script>'));
 test('hold_wiring_is_global_and_stops_when_the_window_loses_focus', () => {
-  assert.ok(main.includes("addEventListener('keydown',e=>{kn(e).forEach(k=>{if(HK_KEYS.includes(k))hkDown[k]=1});hkCheck()});"));
-  assert.ok(main.includes("addEventListener('keyup',e=>{kn(e).forEach(k=>delete hkDown[k]);hkCheck()});"));
-  assert.ok(main.includes("addEventListener('blur',hkClear)"));
+  assert.ok(main.includes("addEventListener('keydown',e=>{const a=kn(e);a.forEach(k=>{if(HK_KEYS.includes(k))hkDown[k]=1;if(M&&!M.over)M.keys[k]=1});hkCheck();if(M&&!M.over&&a.some(k=>NOKEY.includes(k)))e.preventDefault()});"));
+  assert.ok(main.includes("addEventListener('keyup',e=>{kn(e).forEach(k=>{delete hkDown[k];if(M)M.keys[k]=0});hkCheck()});"));
+  assert.ok(main.includes("addEventListener('blur',()=>{hkClear();if(M)M.keys={}})"));
   assert.ok(main.includes('visibilitychange'));
   assert.ok(main.includes('if(holdUpdate(hkSt,held,dt))confetti();'));
 });
