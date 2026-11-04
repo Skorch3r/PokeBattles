@@ -471,7 +471,7 @@ function loop(now){if(!M||M.over||!$('#cv'))return;const dt=Math.min(.05,(now-M.
 const MS=[[30000,'artwork','green','Green ribbon','#4ade80','Artwork'],[80000,'home','blue','Blue ribbon','#60a5fa','3D'],[230000,'shiny','gold','Golden ribbon','#fbbf24','Shiny']];
 function award(id,bp){const c=S.caught[id];c.bp=(c.bp||0)+bp;c.rb=c.rb||[];c.sk=c.sk||[];const m=[];
  MS.forEach(([n,sk,rb,l,col,sn])=>{if(c.bp>=n&&!c.rb.includes(rb)){c.rb.push(rb);if(!c.sk.includes(sk))c.sk.push(sk);m.push(`${l} and the ${sn} skin for ${c.n}`)}});return m}
-const mis=()=>{S.mis=misNormalize(S.mis);misReset(S.mis,Date.now());return S.mis};
+const mis=()=>{S.mis=misNormalize(S.mis);if(misReset(S.mis,Date.now()))toast('Reward path restarted — a new 5-day window begins.'+(S.mis.last?' You reached level '+S.mis.last+' last window.':''));return S.mis};
 function missionEvent(ev,quiet){const done=misEvent(mis(),ev);if(!quiet)save();hud();if(done.length)toast('Mission complete: '+MT[done[0]].t+' — claim it in Missions')}
 function claimMis(i){const r=misClaim(mis(),i);if(!r)return;S.gems+=r.gems;save();hud();jingle(r.level?[72,76,79,84]:[72,76]);
  toast('Mission complete! +💎'+r.mission+(r.level?' · Path level '+r.level+'! +💎'+r.levelGems:'')+(r.prize?' · Choose your 3D skin prize!':''));missions()}

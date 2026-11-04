@@ -179,7 +179,7 @@ test('time_left_text', () => {
   assert.equal(misTimeLeft(0), 'moments'); assert.equal(misTimeLeft(-5), 'moments');
 });
 test('reset_is_wired_into_the_game', () => {
-  assert.ok(main.includes('const mis=()=>{S.mis=misNormalize(S.mis);misReset(S.mis,Date.now());return S.mis};'));
+  assert.ok(main.includes('const mis=()=>{S.mis=misNormalize(S.mis);if(misReset(S.mis,Date.now()))toast(\'Reward path restarted — a new 5-day window begins.\'+(S.mis.last?\' You reached level \'+S.mis.last+\' last window.\':\'\'));return S.mis};'));
   assert.ok(main.includes('The path goes back to the start in ${misTimeLeft(m.next-Date.now())}'));
   assert.ok(!main.includes('misRefresh'), 'the old board-refresh is gone');
 });
