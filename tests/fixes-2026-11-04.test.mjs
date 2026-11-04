@@ -50,6 +50,27 @@ test('nav_confirms_before_abandoning_active_match', () => {
   assert.ok(main.includes("if(M&&!M.over&&!confirm('Leave the match? Progress in this match will be lost.'))return"), 'guarded nav handler with the leave copy');
 });
 
+// H1 — oversized import files freeze the tab (POK-29): the file picker must refuse anything
+// over 1 MB BEFORE handing it to FileReader.
+test('import_file_size_capped_before_read', () => {
+  const i = main.indexOf('fi.onchange='), seg = main.slice(i, i + 400);
+  assert.ok(i >= 0, 'fi.onchange handler present');
+  assert.ok(seg.includes('if(f.size>1048576)'), '1 MB cap checked in fi.onchange');
+  assert.ok(seg.includes("toast('Import file is too large — the limit is 1 MB.')"), 'rejection toast copy');
+  assert.ok(seg.indexOf('if(f.size>1048576)') < seg.indexOf('new FileReader'), 'guard must run before the file is read');
+});
+
+// H2 — validateSaveState must validate every save field, not just the outer shape (POK-29):
+// names/types that aren't plain text reject the import; everything else repairs, never crashes.
+const saveIo = html.match(/<script id="save-io">([\s\S]*?)<\/script>/)[1];
+test('deep_validation_reject_rules_present', () => {
+  assert.ok(saveIo, 'save-io script block found');
+  assert.ok(saveIo.includes('const NAME_BAD=/[<>&"`\\u0000-\\u001f]/'), 'plain-text name reject regex (apostrophes/colons allowed)');
+  assert.ok(saveIo.includes('!okName(c.n)'), 'per-caught name check wired');
+  assert.ok(saveIo.includes('!TYPES.has(t)'), 'type membership check against the real type chart');
+  assert.ok(saveIo.includes('st.pts!==undefined&&!isNum(st.pts)'), 'pts must be a number or the import is rejected (score math)');
+  assert.ok(saveIo.includes('misNormalize(isObj(o.mis)?o.mis:undefined)'), 'mis repaired via the existing self-healing normalizer');
+});
 // B7 — legendaries leak into Easy/Normal matches (POK-28): the opponent roll must filter
 // rarity-4 ids out of the pool unless Hard, and the new-player fallback must roll a
 // legendary-free list (NLG) instead of the whole dex (1..TOTAL).

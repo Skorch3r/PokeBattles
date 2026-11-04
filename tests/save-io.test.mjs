@@ -5,9 +5,20 @@ const m = html.match(/<script id="save-io">([\s\S]*?)<\/script>/);
 const d = html.match(/<script id="difficulty">([\s\S]*?)<\/script>/);
 assert.ok(m, 'save-io script block not found in index.html');
 assert.ok(d, 'difficulty script block not found in index.html');
-// save-io reads DIFF_IDS, so the difficulty block source is prepended inside new Function
-const io = new Function(d[1] + '\n' + m[1] + '\nreturn {SAVE_GAME,SAVE_VERSION,SAVE_CODE_PREFIX,buildExportPayload,b64urlEncode,b64urlDecode,parseImportPayload,validateSaveState,applyImportState};')();
-const { buildExportPayload, parseImportPayload, validateSaveState, applyImportState, b64urlEncode, b64urlDecode } = io;
+// save-io reads DIFF_IDS, so the difficulty block source is prepended inside new Function.
+// Deep validation (POK-29) also derives TYPES/SKKEYS from the main block's X/SKINS consts and
+// repairs `mis` through misNormalize, so the missions block and those const lines are pulled in too.
+const ms = html.match(/<script id="missions">([\s\S]*?)<\/script>/);
+const mainSrc = html.slice(html.lastIndexOf('<script>'));
+assert.ok(ms, 'missions script block not found in index.html');
+const mainLine = (re, what) => { const mm = mainSrc.match(re); assert.ok(mm, 'main block missing ' + what); return mm[0]; };
+const io = new Function(d[1] + '\n' + m[1] + '\n' + ms[1] + '\n'
+  + mainLine(/^const X=\{.*\};$/m, 'type chart X') + '\n'
+  + mainLine(/^const SKINS=\[\[.*\];$/m, 'SKINS list') + '\n'
+  + mainLine(/^const TYPES=new Set\(Object\.keys\(X\)\);$/m, 'TYPES set') + '\n'
+  + mainLine(/^const SKKEYS=new Set\(\[\.\.\.SKINS\.map\(\(\[k\]\)=>k\),'shiny'\]\);$/m, 'SKKEYS set') + '\n'
+  + '\nreturn {SAVE_GAME,SAVE_VERSION,SAVE_CODE_PREFIX,buildExportPayload,b64urlEncode,b64urlDecode,parseImportPayload,validateSaveState,applyImportState,misNormalize,TYPES,SKKEYS};')();
+const { buildExportPayload, parseImportPayload, validateSaveState, applyImportState, b64urlEncode, b64urlDecode, misNormalize } = io;
 
 const S0 = { caught:{25:{n:'pikachu',t:['electric'],b:320,sk:[]}}, wins:6, gems:240, bst:{25:320}, lead:25, se:3, crit:1, ach:{a:1}, mgs:{}, mute:false };
 const decodeCode = code => JSON.parse(decodeURIComponent(escape(atob(code.slice(5).replace(/-/g,'+').replace(/_/g,'/')))));
@@ -188,4 +199,83 @@ test('diff_field_validation_and_import_default', () => {
   assert.equal(applyImportState({}).diff, 'normal', 'missing diff imports as normal');
   assert.equal(applyImportState({ diff: 'hard' }).diff, 'hard');
   assert.equal(applyImportState({ diff: 'zzz' }).diff, 'normal');
+});
+
+// ---------- Import hardening (POK-29 F1): deep validation / repair ----------
+// Principle: names/types that aren't plain text reject the import; everything else repairs.
+const hb = (caught, extra = {}) => ({ game: 'pokebattles', v: 1, saved: '2026-11-02T00:00:00.000Z', state: { caught, ach: {}, gems: 1, wins: 0, ...extra } });
+const imp = env => parseImportPayload(JSON.stringify(env));
+
+test('hardening_names_and_types_reject_hostile_payloads', () => {
+  const c = (n, t) => ({ 1: { n, t } });
+  const bad = [
+    hb(c('<img src=x onerror=alert(1)>', ['fire'])),   // stored-XSS name
+    hb(c('ok', 'fire')),                               // t not an array
+    hb(c('ok', [])),                                   // no types
+    hb(c('ok', ['fire', 'water', 'grass'])),           // 3 types
+    hb(c('ok', ['fire', 'bogus'])),                    // unknown type
+    hb(c('', ['fire'])),                               // empty name
+    hb(c('x'.repeat(61), ['fire'])),                   // over 60 chars
+    hb(c('back`tick', ['fire'])),
+    hb(c('double"quote', ['fire'])),
+    hb(c('ampersand&', ['fire'])),
+    hb(c('tab\tchar', ['fire'])),                      // control character
+    hb({ 1: { n: 'ok', t: ['fire'] }, 2: 'junk' }),    // non-object caught entry
+    hb(c('ok', ['fire']), { pts: '3' }),               // text pts would corrupt score math
+    hb({ 1: { n: 'ok', t: ['fire'] } }, { mgs: { 10033: { n: '<svg onload=alert(1)' } } }) // hostile mega name
+  ];
+  for (const env of bad) assert.equal(imp(env).error, 'shape', JSON.stringify(env.state).slice(0, 90));
+});
+
+test('hardening_names_keep_apostrophes_colons_and_60_chars', () => {
+  const st = hb({ 83: { n: "Farfetch'd", t: ['normal', 'flying'] }, 772: { n: 'Type: Null', t: ['normal'] }, 25: { n: 'Pikachu'.padEnd(60, 'x'), t: ['electric'] } });
+  const r = imp(st);
+  assert.equal(r.ok, true);
+  assert.equal(r.state.caught[83].n, "Farfetch'd");
+  assert.equal(r.state.caught[772].n, 'Type: Null');
+  assert.equal(r.state.caught[25].n.length, 60);
+});
+
+test('hardening_repairs_per_caught_numeric_and_aux_fields', () => {
+  const st = hb({ 25: { n: 'pikachu', t: ['electric'], b: '320', bp: '5', sk: ['artwork', 'bogus', 'shiny', 7], rb: [1, 'gold', null], junk: 'keepme' } });
+  const r = imp(st);
+  assert.equal(r.ok, true);
+  const c = r.state.caught[25];
+  assert.equal(c.b, 320, 'BST numeric string coerced');
+  assert.equal(c.bp, 5, 'battle points numeric string coerced');
+  assert.deepEqual(c.sk, ['artwork', 'shiny'], 'skin keys filtered to real skin keys');
+  assert.deepEqual(c.rb, ['gold'], 'ribbons filtered to strings');
+  assert.equal(c.junk, 'keepme', 'unknown fields preserved');
+  const lean = imp(hb({ 25: { n: 'pikachu', t: ['electric'], b: 320, sk: [] } }));
+  assert.deepEqual(lean.state.caught[25], { n: 'pikachu', t: ['electric'], b: 320, sk: [] }, 'absent aux fields stay absent');
+});
+
+test('hardening_repairs_mgs_skin_bst_ach_items_mis', () => {
+  const st = hb({ 25: { n: 'pikachu', t: ['electric'] } }, {
+    mgs: { 10033: { n: 'Mega Venusaur', sl: 'venusaur-mega', t: ['grass', 'poison'], b: '625' }, junk: { n: 'x' }, 0: { n: 'zero' } },
+    skin: { 25: { s: 'artwork', sh: 1 }, 7: 'art', 8: { s: 'bogus' } },
+    bst: { 25: 320, 26: '303', x: 1 },
+    ach: { a: 1, b: 'yes', c: 0 },
+    items: { boost: '2', junk: 'nope', neg: -3 },
+    mis: { done: 'x', prize: 9, act: [{ id: 'nope', p: 'zzz' }] }
+  });
+  const r = imp(st);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.state.mgs, { 10033: { n: 'Mega Venusaur', sl: 'venusaur-mega', t: ['grass', 'poison'], b: 625 } }, 'non-integer keys dropped, BST coerced');
+  assert.deepEqual(r.state.skin, { 25: { s: 'artwork', sh: 1 } }, 'junk skin values dropped, valid ones kept verbatim');
+  assert.deepEqual(r.state.bst, { 25: 320 }, 'bst cache keeps finite numbers only');
+  assert.deepEqual(r.state.ach, { a: 1, b: 1, c: 0 }, 'achievement flags coerce via truthiness to 0/1');
+  assert.deepEqual(r.state.items, { boost: 2, junk: 0, neg: 0 }, 'item counts coerce to finite numbers');
+  const m = r.state.mis;
+  assert.equal(m.done, 0); assert.equal(m.prize, 0); assert.equal(m.next, 0); assert.equal(m.last, 0, 'mis scalars self-heal');
+  assert.ok(Array.isArray(m.act) && m.act.length >= 1 && m.act.every(a => a && typeof a.id == 'string' && a.id != 'nope' && Number.isInteger(a.p) && a.p >= 0), 'broken act entries are replaced with valid mission slots');
+});
+
+test('hardening_valid_rich_save_roundtrips_byte_identical', () => {
+  const rich = { caught: { 83: { n: "Farfetch'd", t: ['normal', 'flying'], b: 352, bp: 1234, sk: ['artwork'], rb: ['green'] } }, ach: { a: 1 }, gems: 99, wins: 3, pts: 45, se: 2, crit: 1, lead: 83, diff: 'hard', mute: true, mgs: { 10033: { n: 'Mega Venusaur', sl: 'venusaur-mega', t: ['grass', 'poison'], b: 625 } }, skin: { 83: { s: 'artwork', sh: 1 } }, items: { boost: 2 }, mis: misNormalize({}) };
+  const p = buildExportPayload(rich);
+  const r = parseImportPayload(p.code);
+  assert.equal(r.ok, true);
+  assert.equal(JSON.stringify(r.state), JSON.stringify(rich), 'validated state must be byte-identical to the exported state');
+  assert.equal(parseImportPayload(p.fileJson).ok, true, 'file surface imports too');
 });

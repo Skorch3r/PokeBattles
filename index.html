@@ -51,6 +51,9 @@ function b64urlEncode(str){return btoa(unescape(encodeURIComponent(str))).replac
 function b64urlDecode(str){let b=String(str).replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';return decodeURIComponent(escape(atob(b)))}
 const isObj=v=>!!v&&typeof v=='object'&&!Array.isArray(v);
 const isNum=v=>typeof v=='number'&&isFinite(v)&&v>=0;
+// Plain-text name rule: 1–60 chars, no < > & " ` and no control characters. Apostrophes and
+// colons stay legal ("Farfetch'd", "Type: Null"); render-escaping covers what the door lets through.
+const NAME_BAD=/[<>&"`\u0000-\u001f]/,okName=n=>typeof n=='string'&&n.length>=1&&n.length<=60&&!NAME_BAD.test(n),intKey=k=>/^\d+$/.test(k)&&+k>=1,num=v=>{const n=+v;return Number.isFinite(n)&&n>=0?n:0};
 function summarize(state,saved){return{gems:state.gems,caught:Object.keys(state.caught).length,wins:state.wins,saved:saved}}
 function buildExportPayload(S){
  const state={...S};delete state.bst;
@@ -61,12 +64,28 @@ function buildExportPayload(S){
 function validateSaveState(st){
  if(!isObj(st)||!isObj(st.caught)||!isObj(st.ach))return null;
  if(!isNum(st.gems)||!isNum(st.wins))return null;
+ if(st.pts!==undefined&&!isNum(st.pts))return null;
  if(Object.values(st.caught).some(c=>!isObj(c)))return null;
  for(const k of['mgs','skin','bst','mis','items'])if(st[k]!==undefined&&!isObj(st[k]))return null;
  if(st.boost!==undefined&&!isNum(st.boost))return null;
  if(st.diff!==undefined&&!DIFF_IDS.includes(st.diff))return null;
  const o={...st};
  for(const k of['se','crit','lead']){if(o[k]===undefined)o[k]=0;else if(!isNum(o[k]))return null}
+ // Per-caught deep validation: hostile names/types reject the import; numeric/aux fields repair in place.
+ // Only fields that are present are touched, so valid saves round-trip byte-identically.
+ for(const c of Object.values(o.caught)){
+  if(!okName(c.n)||!Array.isArray(c.t)||c.t.length<1||c.t.length>2||c.t.some(t=>!TYPES.has(t)))return null;
+  if('b'in c)c.b=num(c.b);
+  if('bp'in c)c.bp=num(c.bp);
+  if('sk'in c)c.sk=Array.isArray(c.sk)?c.sk.filter(k=>SKKEYS.has(k)):[];
+  if('rb'in c)c.rb=Array.isArray(c.rb)?c.rb.filter(x=>typeof x=='string'):[];
+ }
+ if(o.mgs!==undefined){const mg={};for(const[i,m]of Object.entries(o.mgs)){if(!intKey(i))continue;if(!isObj(m)||!okName(m.n))return null;const r={...m};if('sl'in r&&typeof r.sl!='string')r.sl='';if('t'in r){r.t=Array.isArray(r.t)?r.t.filter(t=>typeof t=='string'&&TYPES.has(t)).slice(0,2):[];if(!r.t.length)delete r.t}if('b'in r)r.b=num(r.b);mg[i]=r}o.mgs=mg}
+ if(o.skin!==undefined){const sk={};for(const[i,v]of Object.entries(o.skin))if(intKey(i)&&isObj(v)&&(!('s'in v)||SKKEYS.has(v.s)))sk[i]=v;o.skin=sk}
+ if(o.bst!==undefined){const bs={};for(const[i,v]of Object.entries(o.bst))if(/^\d+$/.test(i)&&typeof v=='number'&&Number.isFinite(v))bs[i]=v;o.bst=bs}
+ for(const k of Object.keys(o.ach))o.ach[k]=o.ach[k]?1:0;
+ if(o.items!==undefined)for(const k of Object.keys(o.items)){const n=+o.items[k];o.items[k]=Number.isFinite(n)&&n>=0?n:0}
+ if(o.mis!==undefined)o.mis=misNormalize(isObj(o.mis)?o.mis:undefined);
  return o;
 }
 function parseImportPayload(text){
@@ -208,6 +227,7 @@ function holdUpdate(st,held,dt){if(!held){st.t=0;st.fired=false;return false}st.
 <script>
 const API='https://pokeapi.co/api/v2/',SP='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/',TOTAL=1025;
 const X={normal:{rock:.5,steel:.5,ghost:0},fire:{fire:.5,water:.5,grass:2,ice:2,bug:2,rock:.5,dragon:.5,steel:2},water:{fire:2,water:.5,grass:.5,ground:2,rock:2,dragon:.5},electric:{water:2,electric:.5,grass:.5,ground:0,flying:2,dragon:.5},grass:{fire:.5,water:2,grass:.5,poison:.5,ground:2,flying:.5,bug:.5,rock:2,dragon:.5,steel:.5},ice:{fire:.5,water:.5,grass:2,ice:.5,ground:2,flying:2,dragon:2,steel:.5},fighting:{normal:2,ice:2,poison:.5,flying:.5,psychic:.5,bug:.5,rock:2,ghost:0,dark:2,steel:2,fairy:.5},poison:{grass:2,poison:.5,ground:.5,rock:.5,ghost:.5,steel:0,fairy:2},ground:{fire:2,electric:2,grass:.5,poison:2,flying:0,bug:.5,rock:2,steel:2},flying:{electric:.5,grass:2,fighting:2,bug:2,rock:.5,steel:.5},psychic:{fighting:2,poison:2,psychic:.5,dark:0,steel:.5},bug:{fire:.5,grass:2,fighting:.5,poison:.5,flying:.5,psychic:2,ghost:.5,dark:2,steel:.5,fairy:.5},rock:{fire:2,ice:2,fighting:.5,ground:.5,flying:2,bug:2,steel:.5},ghost:{normal:0,psychic:2,ghost:2,dark:.5},dragon:{dragon:2,steel:.5,fairy:0},dark:{fighting:.5,psychic:2,ghost:2,dark:.5,fairy:.5},steel:{fire:.5,water:.5,electric:.5,ice:2,rock:2,steel:.5,fairy:2},fairy:{fire:.5,fighting:2,poison:.5,dragon:2,dark:2,steel:.5}};
+const TYPES=new Set(Object.keys(X));
 const $=s=>document.querySelector(s),rnd=n=>Math.floor(Math.random()*n);
 const fresh=()=>({caught:{},wins:0,gems:0,bst:{},lead:0,se:0,crit:0,ach:{},diff:'normal'});
 let S;try{S=JSON.parse(localStorage.getItem('pdb'))||fresh()}catch(e){S=fresh()}
@@ -215,6 +235,7 @@ if(!DIFF_IDS.includes(S.diff))S.diff='normal';
 const save=()=>{try{localStorage.setItem('pdb',JSON.stringify(S))}catch(e){}};
 S.skin=S.skin||{};S.gems=S.gems??0;S.bst=S.bst||{};S.mgs=S.mgs||{};let SEL=0,RF=-1,M=null,MGF=0;
 const SKINS=[['classic','Classic'],['animated','Animated'],['artwork','Artwork'],['home','3D']];
+const SKKEYS=new Set([...SKINS.map(([k])=>k),'shiny']);
 function spr(id,skin,sh,back){const s=sh?'shiny/':'',b=back?'back/':'';
  return skin=='animated'?`${SP}other/showdown/${b}${s}${id}.gif`:skin=='artwork'?`${SP}other/official-artwork/${s}${id}.png`:skin=='home'?`${SP}other/home/${s}${id}.png`:`${SP}${b}${s}${id}.png`}
 const has=(id,k)=>!!(S.caught[id]&&(S.caught[id].sk||[]).includes(k));
@@ -503,7 +524,7 @@ function wireSave(){
  on('file',()=>{try{const p=buildExportPayload(S),u=URL.createObjectURL(new Blob([p.fileJson],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download=p.fileBase+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);toast('Save file downloaded.')}catch(e){toast('Could not create the file — use Copy code instead.')}});
  on('import',()=>doImport(ta.value));
  on('filepick',()=>fi.click());
- fi.onchange=()=>{const f=fi.files&&fi.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{fi.value='';doImport(String(rd.result))};rd.onerror=()=>{fi.value='';toast('Could not read that file.')};rd.readAsText(f)}}
+ fi.onchange=()=>{const f=fi.files&&fi.files[0];if(!f)return;if(f.size>1048576){fi.value='';toast('Import file is too large — the limit is 1 MB.');return}const rd=new FileReader();rd.onload=()=>{fi.value='';doImport(String(rd.result))};rd.onerror=()=>{fi.value='';toast('Could not read that file.')};rd.readAsText(f)}}
 function doImport(text){
  const r=parseImportPayload(text);
  if(!r.ok){toast(SAVE_ERR[r.error]||SAVE_ERR.format);return}
