@@ -71,10 +71,11 @@ A zero-behavior-change cleanup pass (spec: `docs/superpowers/specs/2026-11-04-co
 
 ### Medium
 
-Two medium fixes (spec: `docs/superpowers/specs/2026-11-04-medium-bugfixes-design.md`); the test suite stayed green throughout.
+Three medium fixes (specs: `docs/superpowers/specs/2026-11-04-medium-bugfixes-design.md`, `docs/superpowers/specs/2026-11-04-legendary-leak-design.md`); the test suite stayed green throughout.
 
 - **Pop-up messages no longer overwrite each other:** toasts now queue and play in order (~2.6 s each) instead of replacing the current one — at match end the "Mission complete" message and every earned achievement toast all show; several achievements at once no longer leave only the last one visible.
 - **Leaving a match now asks first:** clicking one of the top tabs while a match is running shows a "Leave the match?" confirmation — Cancel keeps playing, OK discards the match. On the match-end screen the tabs still switch in one click, since there is nothing left to lose.
+- **Legendaries no longer appear as opponents on Easy/Normal:** the opponent roll now drops Legendary-tier Pokémon (rarity 4, including the 700+ BST megas) from the matching pool, and a fresh save with a nearly empty stat cache rolls its fill-in opponents from a legendary-free list instead of the whole Pokédex — both leak paths closed. Hard mode still fields its random legendary boss; wild camps, your own roster, and rewards are unchanged.
 
 ### Low
 
