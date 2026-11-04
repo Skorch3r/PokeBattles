@@ -67,6 +67,15 @@ A zero-behavior-change cleanup pass (spec: `docs/superpowers/specs/2026-11-04-co
 - **`nm` unshadowed:** the global name formatter `nm` is no longer shadowed by locals — renamed to `mvName` in `skill()`, `fname` in `rosterDraw()` and `label` in the HUD key badges.
 - **Merged duplicates:** `SKN` is now derived from `SKINS` (minus classic, plus shiny) instead of a hand-maintained copy; the two `.cell img` CSS rules became one; the two window key/blur listener sets merged into one keydown/keyup/blur (hold-keys tracking still works outside matches; match keys apply only while a match is active); a match end now writes to localStorage once instead of three times (`checkAch()` and `missionEvent()` take an optional `quiet` flag).
 
+## Bug fixes (2026-11-04)
+
+Four low-priority fixes (spec: `docs/superpowers/specs/2026-11-04-low-bugfixes-design.md`); the test suite stayed green throughout.
+
+- **Reset announcement:** the 5-day reward-path reset used to happen silently. It now shows a toast the first time you play after a reset — "Reward path restarted — a new 5-day window begins.", plus the level you reached last window when that was above level 0.
+- **Legendary note in the Shop:** legendary cards (rarity 4) now carry a "Hard mode only" note on Easy and Normal, matching the picker — they were already unbuyable there, just without saying why.
+- **Shop search survives redraws:** the search box used to drop `"` characters (and mangled `&`) whenever the shop panel re-rendered; quotes and ampersands now survive tab switches and navigation.
+- **Sharp match canvas on HiDPI:** the match canvas kept a fixed 900×520 backing store stretched by CSS, so it was blurry on retina/high-DPI screens. It now renders at the device pixel ratio and stays sharp; game coordinates are unchanged.
+
 ## Numbers you may want to tune
 
 | What | Value | Where in `index.html` |
