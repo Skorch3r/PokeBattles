@@ -14,7 +14,7 @@ Open `index.html` in a desktop browser (Chrome, Firefox, Edge or Safari) while o
 
 ## Also in the game
 - Missions tab: finish missions for gems; every 5 missions raises your reward path one level (resets every 5 days).
-- Standing in your own base heals you. The Unite meter fills 5% every second. A win pays 15 gems, a loss 10.
+- Standing in your own base heals you. The Unite meter fills 5% every second. A win pays 15 gems, a loss 10, and a win gets a confetti shower (skipped if your system asks for reduced motion).
 - Inventory: My items (Points Booster doubles battle points for 105 battles; each win has a 25% chance to drop one) and Save data (copy a code or download a file to move your progress).
 
 ## Notes

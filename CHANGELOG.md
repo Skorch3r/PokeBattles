@@ -1,14 +1,13 @@
 # PokeBattles — progress log
 
-Last updated: 2026-10-31
+Last updated: 2026-11-04
 
 ## Where things stand
 
 - The game is one file, `index.html`. `pokedex-battler.html` is an identical copy; keep the two in sync (or delete one).
-- Tests live in `tests/` and run with `node --test` (74 checks, all passing when last run). Browser checks were run separately in a headless browser and are not part of the repo.
+- Tests live in `tests/` and run with `node --test` (87 checks, all passing when last run). Browser checks were run separately in a headless browser and are not part of the repo.
 - Docs for the save feature are in `docs/superpowers/` (plan and spec).
-- **Not yet on GitHub.** The last push happened before the work below. To save it there, run in PowerShell:
-  `git add .` then `git commit -m "Save codes, missions, items, potion, base zones, team panels"` then `git push`.
+- On GitHub: https://github.com/Skorch3r/PokeBattles. After changing the game, save it with `git add .`, `git commit -m "..."` and `git push` in PowerShell.
 
 ## What was added
 
@@ -32,6 +31,7 @@ Last updated: 2026-10-31
 - **Gems per match:** win 15, loss 10 (draw 10).
 - **Potion:** every match you get one; press **I** to heal 25% of max HP; 15-second cooldown. Not used if you're at full health.
 - **Cooldown pills** at the bottom of the match for K, L and I: green = ready, red = recharging.
+- **Confetti:** winning a match shows about 7 seconds of falling confetti over the result screen. Losses and draws get none. It never blocks clicks, disappears when you press Back to menu, and is skipped if the device asks for reduced motion.
 - **Team panels:** your team on the left, the opponents on the right, each with level and a health bar (works on the 10v10 Volcano map too).
 
 ### Items (Inventory → My items)
@@ -51,6 +51,7 @@ Last updated: 2026-10-31
 | Unite passive charge | 5 per second | `e.ch+5*dt` in `upd()` |
 | Match gems | win 15 / otherwise 10 | `g=win?15:10` in `endM()` |
 | Potion | 25% heal, 15 s cooldown | `POTION` |
+| Confetti | up to 220 pieces, 7 s max | `confettiPieces()`, `confettiDone()` |
 | Points Booster | 105 battles, 25% drop per win | `ITEMS.boost.battles`, `BOOST_DROP` |
 
 ## Choices made on your behalf (easy to change)
@@ -59,6 +60,7 @@ Last updated: 2026-10-31
 - Level 50 needs 250 missions inside one 5-day window (about 50 a day), because the path resets every 5 days.
 - A 25% drop rate per win keeps a booster running almost all the time.
 - The potion heals only you, not teammates.
+- Confetti plays on wins only; say if you want a lighter version for losses.
 - The team panels sit on top of the map edges and cover a little of it.
 
 ## Loose ends
