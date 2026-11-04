@@ -1,9 +1,12 @@
 // POK-26 G8 QA gate — zero-dependency functional probes (extends the POK-18/POK-10 pattern).
 // Drives the real index.html script blocks with DOM/fetch/localStorage stubs.
 // Run: node scripts/qa-gate.mjs   (from anywhere; override the repo path with POKEBATTLES_REPO=...)
-// Expect: 53/53 assertions passed. Covers spec §QA gate: toast queue order (first message shows
-// immediately, then ~2.6 s spacing, hides after drain) and leave-confirm gating (decline keeps the
-// match, accept discards, end-screen nav never calls confirm).
+// Expect: 64/64 assertions passed. Covers spec §QA gate: toast queue order (first message shows
+// immediately, then ~2.6 s spacing, hides after drain), leave-confirm gating (decline keeps the
+// match, accept discards, end-screen nav never calls confirm), and the POK-28 legendary-pool
+// fix: Easy/Normal opponents never resolve to rarity-4 ids from any cache state (primed cache
+// with 700-BST megas, thin pool, empty fresh-save cache), Hard keeps its forced legendary boss
+// and mega-inclusive pool, and wild camps still roll the static WID roster.
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { execSync } from 'node:child_process';
@@ -137,7 +140,7 @@ const sandbox = {
 sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 
-const shim = `;globalThis.__={get S(){return S},set S(v){S=v},get M(){return M},set M(v){M=v},get tab(){return tab},get hkDown(){return hkDown},get hkSt(){return hkSt},get hkIv(){return hkIv},get SH(){return SH},set SH(v){SH=v},get toastQ(){return toastQ},get SKINP(){return SKINP},HK_KEYS,SKN,DIFF_IDS,DIFFS,SAVE_GAME,SAVE_VERSION,parseImportPayload,applyImportState,buildExportPayload,validateSaveState,rar,RN,LEG,TOTAL,legendaryAllowed};globalThis.__q=q=>(Els_===0?0:document.querySelector(q));`;
+const shim = `;globalThis.__={get S(){return S},set S(v){S=v},get M(){return M},set M(v){M=v},get tab(){return tab},get hkDown(){return hkDown},get hkSt(){return hkSt},get hkIv(){return hkIv},get SH(){return SH},set SH(v){SH=v},get toastQ(){return toastQ},get SKINP(){return SKINP},HK_KEYS,SKN,DIFF_IDS,DIFFS,SAVE_GAME,SAVE_VERSION,parseImportPayload,applyImportState,buildExportPayload,validateSaveState,rar,RN,LEG,NLG,WID,TOTAL,legendaryAllowed};globalThis.__q=q=>(Els_===0?0:document.querySelector(q));`;
 vm.runInContext(blocks.join('\n') + shim, sandbox, { filename: 'index.html' });
 const X = sandbox.__;
 
@@ -340,6 +343,66 @@ let endNavThrow = null;
 try { navBtns.find(b => b.dataset.t === 'shop').onclick(); } catch (e) { endNavThrow = e; }
 A('end_screen_nav_no_confirm', !endNavThrow && confirmCalls === 0 && X.M === null && X.tab === 'shop', endNavThrow ? endNavThrow.message : `calls=${confirmCalls} M=${X.M} tab=${X.tab}`);
 sandbox.confirm = realConfirm;
+
+// ---------- POK-28 additions: legendary-pool leak fix (G9 probe groups 14–17) ----------
+// The opponent roll in start() must drop rarity-4 ids from the pool on Easy/Normal and fall back
+// to the legendary-free NLG list when the cache is thin. The gate stub caps fetched BST at 474,
+// so a "700-BST mega" is simulated through S.mgs[].b >= 700 — exactly the field rar() reads —
+// while the mega's cached S.bst sits inside the lead's ±20% band, hitting the same guard branch
+// as production (loadMegas writes both S.bst[id] and S.mgs[id] for mega forms).
+sandbox.confirm = () => true; // accepted leave-nav discards the running match between probes
+const exitMatch = () => { if (X.M) navBtns.find(b => b.dataset.t === 'dex').onclick(); };
+const startMatch = async cell => {
+  navBtns.find(b => b.dataset.t === 'battle').onclick(); q('#go').onclick();
+  Els.get('[data-m]').find(b => b.dataset.m === '0').onclick(); // Meadow Lane, 3v3
+  Els.get('.cell')[cell].onclick();
+  for (let i = 0; i < 200 && !X.M; i++) await tick();
+};
+const rolled = () => X.M.f.slice(1).map(f => f.p.id); // allies + enemies (f[0] is the lead)
+const megaMgs = ids => Object.fromEntries(ids.map((id, k) => [id, { n: 'test-mega-' + k, b: 700 + k, sl: 'garchomp-mega' }]));
+
+// (14) Easy/Normal with a primed cache that includes 700-BST megas + a cached legendary:
+// the guard must strip every rarity-4 id, leaving the 6 clean band members (900–905) — with the
+// old code the pool held 15 members, 9 of them rarity 4, so all-clean rolls were ~1% likely.
+X.S.caught[417] = { n: 'Bandleader', t: ['normal'], b: 389, sk: [] }; // fetched BST 389 under the stub
+X.S.bst = { 417: 389, 900: 380, 901: 400, 902: 390, 903: 385, 904: 395, 905: 370, 144: 350, 9991: 360, 9992: 370, 9993: 380, 9994: 390, 9995: 400, 9996: 410, 9997: 420, 9998: 430 };
+X.S.mgs = megaMgs([9991, 9992, 9993, 9994, 9995, 9996, 9997, 9998]);
+for (const dfr of ['easy', 'normal']) {
+  X.S.diff = dfr;
+  await startMatch(1); // cell 1 = id 417 (cells sort by id: 10, 417)
+  const ids14 = rolled();
+  A('leakfix_' + dfr + '_match_built', !!X.M && X.M.f.length === 6, 'M=' + !!X.M);
+  A('leakfix_' + dfr + '_no_rarity4_or_legendary', ids14.every(id => X.rar(id) !== 4 && !X.LEG.has(id)), JSON.stringify(ids14));
+  A('leakfix_' + dfr + '_no_mega_forms', ids14.every(id => !X.S.mgs[id]), JSON.stringify(ids14));
+  exitMatch();
+}
+
+// (17) wild camps are unaffected: static WID roster, not the opponent pool
+await startMatch(1);
+A('leakfix_wilds_still_from_WID', X.M.w.length === 6 && X.M.w.every(w => X.WID.includes(w.id)), JSON.stringify(X.M.w.map(w => w.id)));
+exitMatch();
+
+// (15) new-player path: empty S.bst/S.mgs -> the pool can't form, every roll comes from NLG
+X.S.diff = 'normal'; X.S.bst = {}; X.S.mgs = {};
+await startMatch(0); // cell 0 = id 10 (Caterpie)
+const ids15 = rolled();
+A('leakfix_fresh_save_match_built', !!X.M && X.M.f.length === 6, 'M=' + !!X.M);
+A('leakfix_fresh_save_all_from_NLG', ids15.every(id => X.NLG.includes(id)), JSON.stringify(ids15));
+exitMatch();
+
+// (16) Hard unchanged: forced legendary boss + the mega-inclusive pool survives unfiltered.
+// All-band-mega cache: pool is exactly 6 rarity-4 members (>5, so rolls come from the pool) —
+// non-boss fighters must all be megas; if the guard wrongly ran on Hard they'd fall back to NLG.
+X.S.diff = 'hard';
+X.S.bst = { 417: 389, 9991: 360, 9992: 370, 9993: 380, 9994: 390, 9995: 400, 9996: 410 };
+X.S.mgs = megaMgs([9991, 9992, 9993, 9994, 9995, 9996]);
+await startMatch(1);
+const ids16 = rolled(); // [f1, f2, boss=f3, f4, f5]
+A('leakfix_hard_boss_is_legendary', !!X.M && X.LEG.has(X.M.f[3].p.id), X.M ? 'boss=' + X.M.f[3].p.id : 'M=null');
+A('leakfix_hard_megas_survive', ids16.filter((_, k) => k !== 2).every(id => X.rar(id) === 4), JSON.stringify(ids16));
+exitMatch();
+sandbox.confirm = realConfirm;
+X.S.diff = 'normal';
 
 // ---------- report ----------
 console.log(out.join('\n'));
