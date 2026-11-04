@@ -12,11 +12,6 @@ nav button.on{background:var(--red);border-color:var(--red)}
 .btn:hover:not(:disabled){border-color:var(--gold)}.btn:disabled{opacity:.4;cursor:not-allowed}
 .btn:focus-visible,nav button:focus-visible{outline:3px solid var(--gold)}
 .stats{color:var(--mute);font-size:14px}main{max-width:900px;margin:0 auto;padding:20px}
-.arena{position:relative;height:340px;background:linear-gradient(#25405e,#1c3048 60%,#2a4a35 60%);border:2px solid var(--line);border-radius:12px;overflow:hidden}
-.mon{position:absolute;display:flex;gap:10px;align-items:center}
-.foe{top:14px;right:16px;flex-direction:row-reverse}.me{bottom:14px;left:16px}
-.mon img{width:150px;height:150px;image-rendering:pixelated;object-fit:contain}
-.card{background:rgba(18,32,47,.9);border:2px solid var(--line);border-radius:8px;padding:8px 12px;min-width:170px}
 .bar{height:8px;background:#0b1520;border-radius:4px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--hp);transition:width .4s}
 .log{height:96px;overflow:auto;margin:12px 0;padding:10px 12px;background:var(--panel);border-radius:8px;font-size:15px}
 .ctl{display:flex;flex-wrap:wrap;gap:8px}
@@ -29,7 +24,6 @@ nav button.on{background:var(--red);border-color:var(--red)}
 #toast{z-index:60;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--gold);color:#222;font-weight:800;padding:10px 18px;border-radius:8px;display:none}
 .shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.card2{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}.card2 img{width:96px;height:96px;object-fit:contain;image-rendering:pixelated}.card2 .btn{width:100%;padding:6px 8px}input.btn{font-weight:400;min-width:160px}.inv img{width:72px;height:72px;object-fit:contain}.panel{display:flex;gap:16px;align-items:center;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px}.panel img{width:120px;height:120px;object-fit:contain}.btn.sel{border-color:var(--gold);background:#3a3320}.cell img{object-fit:contain}.cell.cur{outline:2px solid #fff}.cell.lock{opacity:.45}.cell.mg{box-shadow:inset 0 0 0 2px #c084fc}select.btn{padding:8px}
 .pick{display:flex;gap:12px;flex-wrap:wrap}.pick .btn{display:flex;flex-direction:column;align-items:center}.pick img{width:96px;height:96px;image-rendering:pixelated}
-@media(max-width:560px){.mon img{width:100px;height:100px}.card{min-width:130px}}
 @media(prefers-reduced-motion:reduce){.bar i{transition:none}}
 </style></head><body>
 <header><h1>Pocket Dex Battler</h1><nav><button data-t="battle" class="on">Battle</button><button data-t="dex">Pokédex</button><button data-t="shop">Shop</button><button data-t="inv">Inventory</button><button data-t="mis">Missions</button><button data-t="ach">Achievements</button></nav><button class="btn" id="mus" aria-pressed="true"></button><div class="stats" id="hud"></div></header>
@@ -214,7 +208,7 @@ const legendaryAllowed=d=>DIFFS[d].leg;
 <script>
 const API='https://pokeapi.co/api/v2/',SP='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/',TOTAL=1025;
 const X={normal:{rock:.5,steel:.5,ghost:0},fire:{fire:.5,water:.5,grass:2,ice:2,bug:2,rock:.5,dragon:.5,steel:2},water:{fire:2,water:.5,grass:.5,ground:2,rock:2,dragon:.5},electric:{water:2,electric:.5,grass:.5,ground:0,flying:2,dragon:.5},grass:{fire:.5,water:2,grass:.5,poison:.5,ground:2,flying:.5,bug:.5,rock:2,dragon:.5,steel:.5},ice:{fire:.5,water:.5,grass:2,ice:.5,ground:2,flying:2,dragon:2,steel:.5},fighting:{normal:2,ice:2,poison:.5,flying:.5,psychic:.5,bug:.5,rock:2,ghost:0,dark:2,steel:2,fairy:.5},poison:{grass:2,poison:.5,ground:.5,rock:.5,ghost:.5,steel:0,fairy:2},ground:{fire:2,electric:2,grass:.5,poison:2,flying:0,bug:.5,rock:2,steel:2},flying:{electric:.5,grass:2,fighting:2,bug:2,rock:.5,steel:.5},psychic:{fighting:2,poison:2,psychic:.5,dark:0,steel:.5},bug:{fire:.5,grass:2,fighting:.5,poison:.5,flying:.5,psychic:2,ghost:.5,dark:2,steel:.5,fairy:.5},rock:{fire:2,ice:2,fighting:.5,ground:.5,flying:2,bug:2,steel:.5},ghost:{normal:0,psychic:2,ghost:2,dark:.5},dragon:{dragon:2,steel:.5,fairy:0},dark:{fighting:.5,psychic:2,ghost:2,dark:.5,fairy:.5},steel:{fire:.5,water:.5,electric:.5,ice:2,rock:2,steel:.5,fairy:2},fairy:{fire:.5,fighting:2,poison:.5,dragon:2,dark:2,steel:.5}};
-const $=s=>document.querySelector(s),cap=s=>s[0].toUpperCase()+s.slice(1),w=ms=>new Promise(r=>setTimeout(r,ms)),rnd=n=>Math.floor(Math.random()*n);
+const $=s=>document.querySelector(s),rnd=n=>Math.floor(Math.random()*n);
 const fresh=()=>({caught:{},wins:0,gems:0,bst:{},lead:0,se:0,crit:0,ach:{},diff:'normal'});
 let S;try{S=JSON.parse(localStorage.getItem('pdb'))||fresh()}catch(e){S=fresh()}
 if(S.diff!=='easy'&&S.diff!=='normal'&&S.diff!=='hard')S.diff='normal';
@@ -226,7 +220,7 @@ function spr(id,skin,sh,back){const s=sh?'shiny/':'',b=back?'back/':'';
 const has=(id,k)=>!!(S.caught[id]&&(S.caught[id].sk||[]).includes(k));
 const mySkin=id=>{const k=S.skin[id]||{s:'classic',sh:0};return{s:k.s=='classic'||has(id,k.s)?k.s:'classic',sh:k.sh&&has(id,'shiny')?1:0}};
 function img(id,skin,sh,back,alt){return `<img src="${spr(id,skin,sh,back)}" onerror="this.onerror=null;this.src='${spr(id,'classic',sh,0)}'" alt="${alt||''}">`}
-let NAMES={},cache={},B=null,tab='battle',onlyCaught=false;
+let NAMES={},cache={},tab='battle',onlyCaught=false;
 const nm=n=>n.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 const nCaught=()=>Object.keys(S.caught).length;
 let ctx,master,cur='menu',timer=null,step=0,nextT=0;
@@ -291,12 +285,8 @@ function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';cl
 async function info(id){if(cache[id])return cache[id];const d=await(await fetch(API+'pokemon/'+id)).json(),g=n=>d.stats.find(s=>s.stat.name==n).base_stat;
  const b={hp:g('hp'),atk:g('attack'),def:g('defense'),spa:g('special-attack'),spd:g('special-defense'),spe:g('speed')};
  return cache[id]={id,name:nmM(d.name),types:d.types.map(t=>t.type.name),b,bst:Object.values(b).reduce((a,c)=>a+c,0)}}
-function mk(p,L){const f=(b,h)=>Math.floor(2*b*L/100)+(h?L+10:5),st={hp:f(p.b.hp,1),atk:f(p.b.atk),def:f(p.b.def),spa:f(p.b.spa),spd:f(p.b.spd),spe:f(p.b.spe)};
- const t=p.types;return{p,L,st,max:st.hp,hp:st.hp,heals:3,mv:[{n:cap(t[0])+' Jab',t:t[0],pow:50,acc:100},{n:cap(t[0])+' Blast',t:t[0],pow:90,acc:80},{n:t[1]?cap(t[1])+' Wave':'Body Slam',t:t[1]||'normal',pow:70,acc:95}]}}
 const tl=()=>Math.min(60,10+Math.floor(S.wins/3));
-const log=t=>{const l=$('#log');if(l){l.innerHTML+='<div>'+t+'</div>';l.scrollTop=1e5}};
 function hud(){const mb=document.querySelector('nav [data-t="mis"]');if(mb){const n=misReady(mis());mb.textContent='Missions'+(n?' ('+n+')':'')}$('#hud').textContent=`Owned ${nCaught()}/${TOTAL+Object.keys(S.mgs).length} · Wins ${S.wins} · Gems 💎 ${S.gems} · Trainer Lv ${tl()}`+(boostLeft(S)>0?` · ×2 points (${boostLeft(S)})`:'')+(scanning?` · Scanning rarities ${Object.keys(S.bst).length}/${TOTAL-LEG.size}`:'')}
-function bars(){if(!B)return;for(const k of['me','foe']){const f=B[k];$('#'+k+'hp').style.width=(100*f.hp/f.max)+'%';$('#'+k+'n').textContent=`${f.hp}/${f.max} HP`}}
 let CF=null;
 function confettiStop(){if(!CF)return;cancelAnimationFrame(CF.raf);CF.el.remove();CF=null}
 function confetti(){confettiStop();try{if(matchMedia('(prefers-reduced-motion: reduce)').matches)return}catch(e){}
@@ -307,7 +297,7 @@ function confetti(){confettiStop();try{if(matchMedia('(prefers-reduced-motion: r
   ps.forEach(p=>{if(t<p.d||p.y>h+30)return;g.save();g.translate(p.x,p.y);g.rotate(p.rot);g.scale(1,Math.cos(p.ph*1.7));g.fillStyle=p.c;g.fillRect(-p.w/2,-p.h/2,p.w,p.h);g.restore()});
   if(confettiDone(ps,t,h))return confettiStop();me.raf=requestAnimationFrame(tick)};
  me.raf=requestAnimationFrame(tick)}
-function render(){confettiStop();hud();play(B||M?'battle':'menu');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));
+function render(){confettiStop();hud();play(M?'battle':'menu');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));
  if(tab=='dex')return dex();if(tab=='ach')return achs();if(tab=='inv')return inv();if(tab=='mis')return missions();if(tab=='shop')return shop();battleView()}
 function achs(){$('#m').innerHTML=ACH.map(([n,d])=>`<div class="ach ${S.ach[n]?'on':''}"><div>${S.ach[n]?'★':'☆'}</div><div><b>${n}</b>${d}</div></div>`).join('')}
 function dexList(){const mgs=Object.keys(S.mgs).map(Number).sort(mgSort);if(MGF)return mgs;const mb={};mgs.forEach(m=>(mb[dn(m)]=mb[dn(m)]||[]).push(m));return Array.from({length:TOTAL},(_,k)=>k+1).flatMap(i=>[i,...(mb[i]||[])])}
@@ -330,7 +320,7 @@ function dex(){if(!SEL)SEL=S.lead;const ids=[];
 function battleView(){
  if(!S.lead){$('#m').innerHTML='<h2>Choose your partner</h2><div class="pick">'+[[10,'Caterpie'],[172,'Pichu'],[255,'Torchic']].map(([i,n])=>`<button class="btn" data-i="${i}"><img src="${SP}${i}.png" alt=""><span>${n}</span></button>`).join('')+'</div>';
   document.querySelectorAll('.pick .btn').forEach(b=>b.onclick=async()=>{const p=await info(+b.dataset.i);S.caught[p.id]={n:p.name,t:p.types,b:p.bst,sk:[]};S.lead=p.id;checkAch();render()});return}
- $('#m').innerHTML=`<div class="arena" id="arena"></div><div class="log" id="log">Ready. Pick a map, team up with allies, defeat wild Pokémon for energy, then score it in the enemy goal.</div><div class="ctl" id="ctl"></div>`;
+ $('#m').innerHTML=`<div class="log" id="log">Ready. Pick a map, team up with allies, defeat wild Pokémon for energy, then score it in the enemy goal.</div><div class="ctl" id="ctl"></div>`;
  M?matchView():idle()}
 function idle(){$('#ctl').innerHTML='<button class="btn" id="go">Start a match</button>';$('#go').onclick=mapPick}
 let SH={t:'poke',rf:-1,q:'',n:60,sk:'all'};
