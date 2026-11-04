@@ -16,3 +16,9 @@ test('shop_cards_tag_legendaries_hard_mode_only', () => {
   assert.ok(shopRegion.includes('r==4&&!legendaryAllowed(diffOf(S))'), 'legendary note condition in the shopGrid card template');
   assert.ok(shopRegion.includes('Hard mode only'), 'same copy as the picker');
 });
+
+// B3 — the shop search box drops quotes on redraw: the value attribute must escape, not strip
+test('shop_search_escapes_quotes_and_ampersands', () => {
+  assert.ok(main.includes("SH.q.replace(/&/g,'&amp;').replace(/\"/g,'&quot;')"), 'attribute-safe escape chain (& first)');
+  assert.ok(!main.includes("SH.q.replace(/\"/g,'')"), 'old quote-stripping must be gone');
+});
