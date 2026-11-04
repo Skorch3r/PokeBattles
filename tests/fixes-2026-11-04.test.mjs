@@ -32,3 +32,14 @@ test('match_canvas_scales_by_devicePixelRatio', () => {
   assert.ok(drawRegion.includes('c.setTransform(dpr,0,0,dpr,0,0)'), 'draw() reapplies the transform each frame');
   assert.ok(!html.includes('width="900"'), 'fixed-size canvas attributes removed from the template');
 });
+
+// B5 — pop-up messages overwrite each other (match end: mission toast replaced by achievement toasts):
+// toast() must push onto a FIFO queue and drain one message at a time instead of overwriting
+const oldOverwrite = "clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)";
+test('toast_messages_queue_fifo_instead_of_overwriting', () => {
+  assert.ok(main.includes('const toastQ=[]'), 'FIFO queue declared');
+  assert.ok(main.includes('function toast(t){toastQ.push(t)'), 'toast() pushes and only starts the pump when idle');
+  assert.ok(main.includes('function nextToast('), 'queue pump present');
+  assert.ok(/function nextToast\(\)\{const t=toastQ\.shift\(\);if\(t===undefined\)\{\$\('#toast'\)\.style\.display='none'/.test(main), 'nextToast drains and hides the element');
+  assert.ok(!main.includes(oldOverwrite), 'old overwrite-and-restart line must be gone');
+});

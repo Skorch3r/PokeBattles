@@ -281,7 +281,9 @@ const ACH=[
 ['Mega collector','Own a Mega Pokémon',()=>Object.keys(S.caught).some(i=>S.mgs[i])],
 ['Rainbow','Own Pokémon of all 18 types',()=>new Set(Object.values(S.caught).flatMap(c=>c.t)).size>=18]];
 function checkAch(quiet){ACH.forEach(([n,d,f])=>{if(!S.ach[n]&&f()){S.ach[n]=1;toast('Achievement: '+n)}});if(!quiet)save()}
-function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
+const toastQ=[];
+function toast(t){toastQ.push(t);if(!toast.t)nextToast()}
+function nextToast(){const t=toastQ.shift();if(t===undefined){$('#toast').style.display='none';toast.t=null;return}$('#toast').textContent=t;$('#toast').style.display='block';toast.t=setTimeout(nextToast,2600)}
 async function info(id){if(cache[id])return cache[id];const d=await(await fetch(API+'pokemon/'+id)).json(),g=n=>d.stats.find(s=>s.stat.name==n).base_stat;
  const b={hp:g('hp'),atk:g('attack'),def:g('defense'),spa:g('special-attack'),spd:g('special-defense'),spe:g('speed')};
  return cache[id]={id,name:nmM(d.name),types:d.types.map(t=>t.type.name),b,bst:Object.values(b).reduce((a,c)=>a+c,0)}}
