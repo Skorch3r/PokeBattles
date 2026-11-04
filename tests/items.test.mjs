@@ -52,10 +52,10 @@ test('bad_values_are_treated_as_zero', () => {
   for (const bad of [undefined, null, -3, NaN, 'x']) { assert.equal(boostLeft({ boost: bad }), 0); assert.equal(itemCount({ items: { boost: bad } }, 'boost'), 0); }
 });
 test('booster_is_wired_into_inventory_hud_and_match_end_and_not_sold', () => {
-  for (const s of ['My items', 'data-use="${k}"', 'itemUse(S,k)', 'itemsSection()+', 'wireItems()', 'const bb=boostBattle(S,win?100:50),bp=bb.bp,', 'drop=win&&boostDrop(S);',
+  for (const s of ['My items', 'data-use="${k}"', 'itemUse(S,k)', 'itemsSection()+', 'wireItems()', 'const bb=boostBattle(S,matchPoints(dfr,win)),bp=bb.bp,', 'drop=win&&boostDrop(S);',
     'You found a Points Booster!', 'Points Booster ×2 —', '×2 points (${boostLeft(S)})', 'chance to drop one'])
     assert.ok(main.includes(s), 'missing: ' + s);
-  assert.ok(main.indexOf('boostBattle(S,win?100:50)') < main.indexOf('award(me.p.id,bp)'), 'doubled before points are awarded');
+  assert.ok(main.indexOf('boostBattle(S,matchPoints(dfr,win))') < main.indexOf('award(me.p.id,bp)'), 'doubled before points are awarded');
   assert.ok(!main.includes("['item','Items']") && !main.includes('data-bi=') && !main.includes('itemBuy'), 'no Shop purchase of items');
 });
 
