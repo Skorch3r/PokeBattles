@@ -139,7 +139,7 @@ test('validate_survives_proto_key', () => {
 test('apply_fills_lazy_defaults', () => {
   const imported = { caught:{}, ach:{}, gems:1, wins:0 };
   const prev = JSON.parse(JSON.stringify(S0));
-  const out = applyImportState(S0, imported);
+  const out = applyImportState(imported);
   assert.deepEqual(out.mgs, {}); assert.equal(out.pts, 0);
   // mirrors the load path (index.html line 44): skin, gems, bst, mgs must all exist
   assert.deepEqual(out.skin, {}); assert.deepEqual(out.bst, {}); assert.equal(out.gems, 1);
@@ -148,7 +148,7 @@ test('apply_fills_lazy_defaults', () => {
 });
 test('apply_keeps_imported_values_and_isolates', () => {
   const imported = { caught:{ 25:{ n:'pikachu', t:['electric'], b:320, sk:[] } }, ach:{}, gems:9, wins:2, pts:77, mgs:{ 10033:{ n:'Mega' } }, skin:{ 25:'art' } };
-  const out = applyImportState(S0, imported);
+  const out = applyImportState(imported);
   assert.equal(out.pts, 77); assert.deepEqual(out.mgs, imported.mgs); assert.deepEqual(out.skin, { 25:'art' });
   out.caught[25].n = 'changed';
   assert.equal(imported.caught[25].n, 'pikachu');
@@ -185,7 +185,7 @@ test('diff_field_validation_and_import_default', () => {
   assert.notEqual(validateSaveState({ ...base, diff: 'hard' }), null);
   assert.equal(validateSaveState({ ...base, diff: 'zzz' }), null);
   assert.equal(validateSaveState({ ...base, diff: 7 }), null);
-  assert.equal(applyImportState(base, {}).diff, 'normal', 'missing diff imports as normal');
-  assert.equal(applyImportState(base, { diff: 'hard' }).diff, 'hard');
-  assert.equal(applyImportState(base, { diff: 'zzz' }).diff, 'normal');
+  assert.equal(applyImportState({}).diff, 'normal', 'missing diff imports as normal');
+  assert.equal(applyImportState({ diff: 'hard' }).diff, 'hard');
+  assert.equal(applyImportState({ diff: 'zzz' }).diff, 'normal');
 });

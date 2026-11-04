@@ -29,6 +29,18 @@ test('leftover_files_are_gone', () => {
   assert.ok(!existsSync(new URL('../STUDIO-SMOKE.md', import.meta.url)), 'leftover STUDIO-SMOKE.md deleted');
 });
 
+// E3 (POK-15) drops the unused parameters and unshadows the nm identifier.
+// Absence pins — if an unused param or one of the three nm shadows returns, they fail.
+test('unused_params_are_gone_and_nm_is_unshadowed', () => {
+  assert.ok(!html.includes('cdi'), 'burst() drops the unused cdi param (sole call passes 3 args)');
+  assert.ok(!html.includes('prevS'), 'applyImportState() drops the unused prevS param');
+  assert.ok(!html.includes('pw(p,1)') && !html.includes('(p,d)=>'), 'pw is 1-arg; sole call site is pw(p)');
+  assert.ok(!html.includes('const[nm,'), 'skill() destructures the move name as mvName, not a nm shadow');
+  assert.ok(!html.includes(',nm=(e.p&&e.p.name)'), 'rosterDraw() names the fighter fname, not a nm shadow');
+  assert.ok(!html.includes('[k,nm,cd]'), 'HUD badges destructure label, not a nm shadow');
+  assert.ok(html.includes('const nm=n=>'), 'the global nm name-formatter is untouched');
+});
+
 // E4 (POK-16) merges the two window listener sets and adds the quiet save path.
 // Those pins are pre-written here and activate when that task lands; skipping
 // them keeps this suite green at E1 without trampling E4's scope.
