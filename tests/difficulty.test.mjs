@@ -66,3 +66,10 @@ test('legendary_leads_blocked_outside_hard', () => {
   assert.ok(main.includes('Hard mode only'), 'picker tags locked legendaries');
   assert.ok(html.includes('.cell.lock{opacity:.45}'), 'locked cells are visually greyed');
 });
+test('map_pick_shows_persistent_difficulty_row', () => {
+  const main = html.slice(html.lastIndexOf('<script>'));
+  assert.ok(main.includes('data-d="${d}"'), 'one button per difficulty');
+  assert.ok(main.includes("d==dfr?'sel':''"), 'current level is highlighted');
+  assert.ok(main.includes('S.diff=b.dataset.d;save();mapPick()'), 'clicking a level persists it and re-renders');
+  assert.ok(main.includes('DIFFS[dfr].hint'), 'the row explains what the level changes');
+});
