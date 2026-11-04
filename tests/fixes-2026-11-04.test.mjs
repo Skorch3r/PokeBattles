@@ -71,6 +71,22 @@ test('deep_validation_reject_rules_present', () => {
   assert.ok(saveIo.includes('st.pts!==undefined&&!isNum(st.pts)'), 'pts must be a number or the import is rejected (score math)');
   assert.ok(saveIo.includes('misNormalize(isObj(o.mis)?o.mis:undefined)'), 'mis repaired via the existing self-healing normalizer');
 });
+// H3 — stored XSS via imported save (POK-29): every save-supplied name/type must be HTML-escaped
+// at render. H2 rejects markup at the door; escaping is the defense-in-depth layer.
+test('render_paths_escape_save_supplied_names', () => {
+  assert.ok(main.includes('const esc=s=>String(s).replace('), 'esc() helper defined next to img()');
+  assert.ok(main.includes('alt="${esc(alt||\'\')}"'), 'img() escapes the alt attribute');
+  // the 7 content sites: panel name + type line, dex cells, shop owned, shop, picker, prize select, inventory
+  assert.ok(main.includes('<b>#${dn(SEL)} ${esc(c.n)}</b>'), 'dex panel name');
+  assert.ok(main.includes("${esc(c.t.join(' / '))}"), 'dex panel type line');
+  assert.ok(main.includes("${g?esc(g.n):esc(NAMES[i]||'???')}"), 'dex cell name');
+  assert.ok(main.includes('<b>${esc(c.n)}</b>'), 'shop owned name');
+  assert.ok(main.includes('<b>${esc(nmv)}</b>'), 'shop name');
+  assert.ok(main.includes('<div>${esc(g.n)}</div>'), 'picker name');
+  assert.ok(main.includes('${esc(S.caught[i].n)}</option>'), 'mission prize select');
+  assert.ok(main.includes('<b>#${dn(i)} ${esc(c.n)}</b>'), 'inventory name');
+});
+
 // B7 — legendaries leak into Easy/Normal matches (POK-28): the opponent roll must filter
 // rarity-4 ids out of the pool unless Hard, and the new-player fallback must roll a
 // legendary-free list (NLG) instead of the whole dex (1..TOTAL).
