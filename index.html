@@ -252,7 +252,7 @@ function jingle(ns){if(!ctx||S.mute)return;ns.forEach((n,i)=>tone(ctx.currentTim
 function initAudio(){if(!ctx){ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.5;master.connect(ctx.destination);ctx.onstatechange=musLabel;const u=ctx.createBufferSource();u.buffer=ctx.createBuffer(1,1,22050);u.connect(ctx.destination);u.start(0)}if(ctx.state!='running')ctx.resume();if(!S.mute&&!timer)play(cur,1);musLabel()}
 const musLabel=()=>{const b=$('#mus'),on=ctx&&ctx.state=='running';b.textContent=S.mute?'♪ Music off':on?'♪ Music on':'♪ Click to start music';b.setAttribute('aria-pressed',!S.mute)};
 const R=(a,b)=>Array.from({length:b-a+1},(_,i)=>a+i);
-const LEG=new Set([144,145,146,150,151,243,244,245,249,250,251,...R(377,386),...R(480,494),...R(638,649),...R(716,721),772,773,...R(785,809),...R(888,898),1001,1002,1003,1004,1007,1008,1009,1010,1017,1024,1025]);
+const LEG=new Set([144,145,146,150,151,243,244,245,249,250,251,...R(377,386),...R(480,494),...R(638,649),...R(716,721),772,773,...R(785,809),...R(888,898),1001,1002,1003,1004,1007,1008,1009,1010,1017,1024,1025]);const NLG=Array.from({length:TOTAL},(_,k)=>k+1).filter(i=>!LEG.has(i));
 const RN=['Common','Uncommon','Rare','Epic','Legendary'],RC=['#9ca3af','#4ade80','#60a5fa','#c084fc','#fbbf24'],COST=[40,100,250,600,1500],GEM=[12,18,30,50,100],SKINP={animated:40,artwork:60,home:80,shiny:150};
 const rar=(id,b)=>S.mgs[id]?(S.mgs[id].b>=700?4:3):LEG.has(id)?4:(b=b||S.bst[id])?(b<330?0:b<430?1:b<500?2:3):-1;
 let scanning=false;
@@ -367,7 +367,8 @@ async function start(mid){if(!legendaryAllowed(diffOf(S))&&rar(mid)==4){toast('L
  try{const me=await info(mid),near2=(f)=>Object.keys(S.bst).map(Number).filter(i=>i!=mid&&f(S.bst[i]));
   let pool=near2(v=>v>=me.bst*.8&&v<=me.bst*1.2);if(pool.length<8)pool=near2(v=>Math.abs(v-me.bst)<me.bst*.4);
   const mp=MAPS[MI],n=mp.sz;AW=mp.w;AH=mp.h;
-  const pk=()=>pool.length>5?pool[rnd(pool.length)]:1+rnd(TOTAL),dfr=diffOf(S),ids=Array.from({length:2*n-1},pk);if(DIFFS[dfr].leg)ids[n-1]=[...LEG][rnd(LEG.size)];const ps=[me,...await Promise.all(ids.map(info))];
+  const dfr=diffOf(S);if(!legendaryAllowed(dfr))pool=pool.filter(i=>rar(i)!=4);
+  const pk=()=>pool.length>5?pool[rnd(pool.length)]:NLG[rnd(NLG.length)],ids=Array.from({length:2*n-1},pk);if(DIFFS[dfr].leg)ids[n-1]=[...LEG][rnd(LEG.size)];const ps=[me,...await Promise.all(ids.map(info))];
   const pw=p=>Math.max(.4,Math.min(1.5,me.bst/p.bst)),ys=Array.from({length:n},(_,i)=>AH*(i+1)/(n+1)),hi=Math.floor(n/2),sl=[hi,...ys.map((_,k)=>k).filter(k=>k!=hi)];
   const pos=(t,k)=>{if(!mp.ring)return[t?AW-120:120,ys[k]];const a=(t?0:Math.PI)+(k-(n-1)/2)*.15*(t?1:-1),r=740+(k%2?55:-55);return[AW/2+r*Math.cos(a),AH/2+r*Math.sin(a)]};
   M={mp,f:ps.map((p,i)=>{const t=i<n?0:1,j=t?i-n:i,[x,y]=pos(t,t?j:sl[j]);return mkF(p,t,x,y,i==0,i==0?1:pw(p)*(t?enemyPower(dfr):1))}),

@@ -49,3 +49,13 @@ test('toast_messages_queue_fifo_instead_of_overwriting', () => {
 test('nav_confirms_before_abandoning_active_match', () => {
   assert.ok(main.includes("if(M&&!M.over&&!confirm('Leave the match? Progress in this match will be lost.'))return"), 'guarded nav handler with the leave copy');
 });
+
+// B7 — legendaries leak into Easy/Normal matches (POK-28): the opponent roll must filter
+// rarity-4 ids out of the pool unless Hard, and the new-player fallback must roll a
+// legendary-free list (NLG) instead of the whole dex (1..TOTAL).
+test('easy_normal_opponent_roll_excludes_legendary_tier', () => {
+  assert.ok(main.includes('const NLG=Array.from({length:TOTAL},(_,k)=>k+1).filter(i=>!LEG.has(i))'), 'legendary-free NLG list defined next to LEG');
+  assert.ok(main.includes('if(!legendaryAllowed(dfr))pool=pool.filter(i=>rar(i)!=4)'), 'pool guard drops rarity-4 ids on Easy/Normal');
+  assert.ok(!main.includes('1+rnd(TOTAL)'), 'old whole-dex fallback (leaks ~90 LEG ids on fresh saves) must be gone');
+  assert.ok(main.includes('NLG[rnd(NLG.length)]'), 'thin-pool fallback rolls from the legendary-free list');
+});
