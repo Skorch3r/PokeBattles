@@ -6,7 +6,7 @@ Last updated: 2026-11-04
 
 - The game is one file, `index.html` — the single source of truth. The old identical mirror copy `pokedex-battler.html` was deleted in the code cleanup (see Code cleanup below); don't recreate it.
 - Tests live in `tests/` and run with `node --test "tests/*.test.mjs"` (119 checks, all passing when last run). Browser checks were run separately in a headless browser and are not part of the repo.
-- Docs for the save feature are in `docs/superpowers/` (plan and spec).
+- Design specs and implementation plans for each milestone live in the Paperclip studio folder (`PokeBattles-Paperclip-Studio/superpowers/`), not in this repo.
 - On GitHub: https://github.com/Skorch3r/PokeBattles. After changing the game, save it with `git add .`, `git commit -m "..."` and `git push` in PowerShell.
 
 ## What was added
@@ -58,7 +58,7 @@ Last updated: 2026-11-04
 
 ## Code cleanup (2026-11-04)
 
-A zero-behavior-change cleanup pass (spec: `docs/superpowers/specs/2026-11-04-code-cleanup-design.md`); the test suite stayed green throughout.
+A zero-behavior-change cleanup pass; the test suite stayed green throughout.
 
 - **Files removed:** `pokedex-battler.html` (stale full duplicate of the game — the "keep or delete" question was decided: delete; `index.html` alone is the source of truth) and `STUDIO-SMOKE.md` (leftover test file).
 - **Dead battle code removed:** leftovers from the old turn-based battle — `mk()` (including its never-saved `heals:3` field), `cap`, `w`, `log()`, `bars()`, the unused `B` variable, the old battle CSS (`.arena`, `.mon`, `.foe`, `.me`, `.card`, the `max-width:560px` media rule) and the `#arena` box from the battle view. The `#log` intro text stays, and `.bar` CSS stays (missions progress bars use it).
@@ -71,7 +71,7 @@ A zero-behavior-change cleanup pass (spec: `docs/superpowers/specs/2026-11-04-co
 
 ### Medium
 
-Three medium fixes (specs: `docs/superpowers/specs/2026-11-04-medium-bugfixes-design.md`, `docs/superpowers/specs/2026-11-04-legendary-leak-design.md`); the test suite stayed green throughout.
+Three medium fixes; the test suite stayed green throughout.
 
 - **Pop-up messages no longer overwrite each other:** toasts now queue and play in order (~2.6 s each) instead of replacing the current one — at match end the "Mission complete" message and every earned achievement toast all show; several achievements at once no longer leave only the last one visible.
 - **Leaving a match now asks first:** clicking one of the top tabs while a match is running shows a "Leave the match?" confirmation — Cancel keeps playing, OK discards the match. On the match-end screen the tabs still switch in one click, since there is nothing left to lose.
@@ -79,7 +79,7 @@ Three medium fixes (specs: `docs/superpowers/specs/2026-11-04-medium-bugfixes-de
 
 ### Low
 
-Four low-priority fixes (spec: `docs/superpowers/specs/2026-11-04-low-bugfixes-design.md`); the test suite stayed green throughout.
+Four low-priority fixes; the test suite stayed green throughout.
 
 - **Reset announcement:** the 5-day reward-path reset used to happen silently. It now shows a toast the first time you play after a reset — "Reward path restarted — a new 5-day window begins.", plus the level you reached last window when that was above level 0.
 - **Legendary note in the Shop:** legendary cards (rarity 4) now carry a "Hard mode only" note on Easy and Normal, matching the picker — they were already unbuyable there, just without saying why.
@@ -88,7 +88,7 @@ Four low-priority fixes (spec: `docs/superpowers/specs/2026-11-04-low-bugfixes-d
 
 ## Security & robustness (2026-11-04)
 
-Three import-hardening fixes (spec: `docs/superpowers/specs/2026-11-04-import-hardening-design.md`); the test suite stayed green throughout.
+Three import-hardening fixes; the test suite stayed green throughout.
 
 - **Import files are capped at 1 MB:** a huge save file used to be read straight into memory and could freeze the tab. Oversized files are now refused with a toast before anything is read (pasted codes were already size-bounded by the text box).
 - **Every save field is validated on import:** names and types that aren't plain text (HTML/script markup, control characters, wrong shapes) now **reject the import** with the standard "damaged save" message instead of crashing panels — a saved type list like `"fire"` (text instead of a list) used to break the Pokédex panel outright, and text in the score field silently corrupted the points math. Numeric and map fields (base stats, battle points, ribbons, skin keys, mega entries, achievement flags, item counts, mission state) are **repaired in place** — numeric strings coerce, junk values drop or default — so a malformed save can no longer crash the game or quietly corrupt state. Only fields that are actually present are touched: valid saves import byte-for-byte identically, and names like "Farfetch'd" or "Type: Null" keep importing.
