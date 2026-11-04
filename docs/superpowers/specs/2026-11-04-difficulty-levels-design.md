@@ -79,10 +79,14 @@ identical on all difficulties. A Hard win still counts as one win for achievemen
 
 ### Legendary exclusivity rule
 
-- "Legendary rarity" = `rar(id) === 4` (gold tag). This includes the `LEG` set **and**
-  Mega Pokémon with base stat total ≥ 700. *(Builder note: this scope was the
-  assistant's call — the rule keys off the visible rarity tag so the dex never
-  contradicts the picker. Human approved by omission at doc review.)*
+- "Legendary rarity" = `rar(id) === 4` — nothing else. For Mega Pokémon this means
+  **only those whose rarity value is itself 4** (the ≥700-BST megas that display the
+  gold Legendary tag). Epic-rarity megas (rarity 3, bst < 700) are unaffected and
+  playable on every difficulty. The rule always follows the rarity value shown in
+  the dex — no separate mega special-case.
+  *(Builder note: this scope was the assistant's call — keying off the visible
+  rarity value keeps the dex and the picker consistent. Human confirmed at doc
+  review.)*
 - **Easy/Normal:** rarity-4 Pokémon cannot be chosen as the battle lead. In the
   fighter picker they render greyed with a "Hard mode only" tag; tapping shows a
   toast. If the saved lead is rarity-4 when starting an Easy/Normal match, the match
