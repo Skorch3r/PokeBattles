@@ -55,3 +55,14 @@ test('ai_uses_difficulty_rates_and_retreat', () => {
   assert.ok(main.includes('Math.random()<ra[0])skill(e,1)'), 'skill-1 gate uses the difficulty rate');
   assert.ok(main.includes('Math.random()<ra[2])unite(e)'), 'unite gate uses the difficulty rate');
 });
+test('hard_fields_a_legendary_on_the_enemy_team', () => {
+  const main = html.slice(html.lastIndexOf('<script>'));
+  assert.ok(main.includes('if(DIFFS[dfr].leg)ids[n-1]=[...LEG][rnd(LEG.size)]'), 'team-1 slot 0 becomes a random legendary on hard');
+  assert.ok(main.includes('pw(p,1)*(t?enemyPower(dfr):1)'), 'enemy power multiplier applies to team 1 only');
+});
+test('legendary_leads_blocked_outside_hard', () => {
+  const main = html.slice(html.lastIndexOf('<script>'));
+  assert.ok(main.includes("rar(mid)==4){toast('Legendary Pokémon can only be used in Hard mode.'"), 'start() refuses a legendary lead on easy/normal');
+  assert.ok(main.includes('Hard mode only'), 'picker tags locked legendaries');
+  assert.ok(html.includes('.cell.lock{opacity:.45}'), 'locked cells are visually greyed');
+});
