@@ -86,6 +86,14 @@ Four low-priority fixes (spec: `docs/superpowers/specs/2026-11-04-low-bugfixes-d
 - **Shop search survives redraws:** the search box used to drop `"` characters (and mangled `&`) whenever the shop panel re-rendered; quotes and ampersands now survive tab switches and navigation.
 - **Sharp match canvas on HiDPI:** the match canvas kept a fixed 900×520 backing store stretched by CSS, so it was blurry on retina/high-DPI screens. It now renders at the device pixel ratio and stays sharp; game coordinates are unchanged.
 
+## Security & robustness (2026-11-04)
+
+Three import-hardening fixes (spec: `docs/superpowers/specs/2026-11-04-import-hardening-design.md`); the test suite stayed green throughout.
+
+- **Import files are capped at 1 MB:** a huge save file used to be read straight into memory and could freeze the tab. Oversized files are now refused with a toast before anything is read (pasted codes were already size-bounded by the text box).
+- **Every save field is validated on import:** names and types that aren't plain text (HTML/script markup, control characters, wrong shapes) now **reject the import** with the standard "damaged save" message instead of crashing panels — a saved type list like `"fire"` (text instead of a list) used to break the Pokédex panel outright, and text in the score field silently corrupted the points math. Numeric and map fields (base stats, battle points, ribbons, skin keys, mega entries, achievement flags, item counts, mission state) are **repaired in place** — numeric strings coerce, junk values drop or default — so a malformed save can no longer crash the game or quietly corrupt state. Only fields that are actually present are touched: valid saves import byte-for-byte identically, and names like "Farfetch'd" or "Type: Null" keep importing.
+- **Save-supplied names and types are HTML-escaped everywhere they render** (Pokédex panel and cells, Shop, picker, prize select, inventory, sprite alt text). A crafted save whose Pokémon name contained `<img src=x onerror=…>` used to execute that markup every time the Pokédex or Shop opened; now nothing executes even if a future code path ever lets markup through the import door.
+
 ## Numbers you may want to tune
 
 | What | Value | Where in `index.html` |
