@@ -526,7 +526,7 @@ const hkClear=()=>{HK_KEYS.forEach(k=>delete hkDown[k]);hkCheck()};
 addEventListener('keydown',e=>{const a=kn(e);a.forEach(k=>{if(HK_KEYS.includes(k))hkDown[k]=1;if(M&&!M.over)M.keys[k]=1});hkCheck();if(M&&!M.over&&a.some(k=>NOKEY.includes(k)))e.preventDefault()});
 addEventListener('keyup',e=>{kn(e).forEach(k=>{delete hkDown[k];if(M)M.keys[k]=0});hkCheck()});
 addEventListener('blur',()=>{hkClear();if(M)M.keys={}});document.addEventListener('visibilitychange',()=>{if(document.hidden)hkClear()});
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{M=null;tab=b.dataset.t;render()});
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(M&&!M.over&&!confirm('Leave the match? Progress in this match will be lost.'))return;M=null;tab=b.dataset.t;render()});
 ['click','touchend','keydown'].forEach(ev=>document.addEventListener(ev,e=>{if(!e.target||e.target.id!='mus')initAudio()}));
 $('#mus').onclick=()=>{const running=ctx&&ctx.state=='running'&&timer;if(!running&&!S.mute){initAudio();return}S.mute=!S.mute;save();if(S.mute){stopM()}else{initAudio();play(cur,1)}musLabel()};
 musLabel();render();loadNames().then(()=>{if(tab=='dex')dex()});Object.entries(S.mgs).forEach(([i,m])=>NAMES[i]=m.n);loadMegas();scan();

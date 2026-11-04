@@ -43,3 +43,9 @@ test('toast_messages_queue_fifo_instead_of_overwriting', () => {
   assert.ok(/function nextToast\(\)\{const t=toastQ\.shift\(\);if\(t===undefined\)\{\$\('#toast'\)\.style\.display='none'/.test(main), 'nextToast drains and hides the element');
   assert.ok(!main.includes(oldOverwrite), 'old overwrite-and-restart line must be gone');
 });
+
+// B6 — clicking a top tab during a match throws the match away without asking:
+// the nav handler must confirm while a match is actively running (M && !M.over)
+test('nav_confirms_before_abandoning_active_match', () => {
+  assert.ok(main.includes("if(M&&!M.over&&!confirm('Leave the match? Progress in this match will be lost.'))return"), 'guarded nav handler with the leave copy');
+});
