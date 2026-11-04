@@ -48,3 +48,10 @@ test('fresh_and_load_default_to_normal', () => {
   assert.ok(main.includes("diff:'normal'"), 'fresh() starts saves on normal');
   assert.ok(main.includes("S.diff!=='easy'&&S.diff!=='normal'&&S.diff!=='hard'"), 'load path repairs missing/invalid diff');
 });
+test('ai_uses_difficulty_rates_and_retreat', () => {
+  const main = html.slice(html.lastIndexOf('<script>'));
+  assert.ok(main.includes('const rt=retreatAt(diffOf(S)),ra=aiRates(diffOf(S))'), 'ai() reads the difficulty layer');
+  assert.ok(main.includes('Math.random()<ra[1])skill(e,2,tg)'), 'skill-2 gate uses the difficulty rate');
+  assert.ok(main.includes('Math.random()<ra[0])skill(e,1)'), 'skill-1 gate uses the difficulty rate');
+  assert.ok(main.includes('Math.random()<ra[2])unite(e)'), 'unite gate uses the difficulty rate');
+});

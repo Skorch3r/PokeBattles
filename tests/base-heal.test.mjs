@@ -8,7 +8,7 @@ test('own_base_heals_in_the_match_update', () => {
   assert.ok(main.indexOf('const hb=M.gl[e.team]') < main.indexOf('e.slow-=dt;e.sh-=dt;if(e.stun>0)'));
 });
 test('ai_retreats_to_base_and_stays_until_healed', () => {
-  assert.ok(main.includes('(e.hp<e.max*.3||(inb&&e.hp<e.max*.8))&&!e.carry'));
+  assert.ok(main.includes('(e.hp<e.max*rt||(inb&&e.hp<e.max*(rt+.5)))&&!e.carry'), 'retreat threshold comes from the difficulty layer; return-at stays retreat+50 HP%');
 });
 test('base_is_drawn_as_a_heal_zone_and_explained', () => {
   assert.ok(main.includes("c.fillText('HEAL'"));
