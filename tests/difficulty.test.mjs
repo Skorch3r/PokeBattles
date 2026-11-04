@@ -46,7 +46,7 @@ test('accessors_index_the_table', () => {
 test('fresh_and_load_default_to_normal', () => {
   const main = html.slice(html.lastIndexOf('<script>'));
   assert.ok(main.includes("diff:'normal'"), 'fresh() starts saves on normal');
-  assert.ok(main.includes("S.diff!=='easy'&&S.diff!=='normal'&&S.diff!=='hard'"), 'load path repairs missing/invalid diff');
+  assert.ok(main.includes("if(!DIFF_IDS.includes(S.diff))S.diff='normal'"), 'load path repairs missing/invalid diff');
 });
 test('ai_uses_difficulty_rates_and_retreat', () => {
   const main = html.slice(html.lastIndexOf('<script>'));

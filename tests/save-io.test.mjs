@@ -2,8 +2,11 @@ import { test } from 'node:test'; import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const m = html.match(/<script id="save-io">([\s\S]*?)<\/script>/);
+const d = html.match(/<script id="difficulty">([\s\S]*?)<\/script>/);
 assert.ok(m, 'save-io script block not found in index.html');
-const io = new Function(m[1] + '\nreturn {SAVE_GAME,SAVE_VERSION,SAVE_CODE_PREFIX,buildExportPayload,b64urlEncode,b64urlDecode,parseImportPayload,validateSaveState,applyImportState};')();
+assert.ok(d, 'difficulty script block not found in index.html');
+// save-io reads DIFF_IDS, so the difficulty block source is prepended inside new Function
+const io = new Function(d[1] + '\n' + m[1] + '\nreturn {SAVE_GAME,SAVE_VERSION,SAVE_CODE_PREFIX,buildExportPayload,b64urlEncode,b64urlDecode,parseImportPayload,validateSaveState,applyImportState};')();
 const { buildExportPayload, parseImportPayload, validateSaveState, applyImportState, b64urlEncode, b64urlDecode } = io;
 
 const S0 = { caught:{25:{n:'pikachu',t:['electric'],b:320,sk:[]}}, wins:6, gems:240, bst:{25:320}, lead:25, se:3, crit:1, ach:{a:1}, mgs:{}, mute:false };
