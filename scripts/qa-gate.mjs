@@ -1,12 +1,16 @@
 // POK-26 G8 QA gate — zero-dependency functional probes (extends the POK-18/POK-10 pattern).
 // Drives the real index.html script blocks with DOM/fetch/localStorage stubs.
 // Run: node scripts/qa-gate.mjs   (from anywhere; override the repo path with POKEBATTLES_REPO=...)
-// Expect: 64/64 assertions passed. Covers spec §QA gate: toast queue order (first message shows
+// Expect: 88/88 assertions passed. Covers spec §QA gate: toast queue order (first message shows
 // immediately, then ~2.6 s spacing, hides after drain), leave-confirm gating (decline keeps the
-// match, accept discards, end-screen nav never calls confirm), and the POK-28 legendary-pool
+// match, accept discards, end-screen nav never calls confirm), the POK-28 legendary-pool
 // fix: Easy/Normal opponents never resolve to rarity-4 ids from any cache state (primed cache
 // with 700-BST megas, thin pool, empty fresh-save cache), Hard keeps its forced legendary boss
-// and mega-inclusive pool, and wild camps still roll the static WID roster.
+// and mega-inclusive pool, wild camps still roll the static WID roster — and the POK-29 import
+// hardening: 1 MB file cap refuses before FileReader, hostile names/types (caught + mega) reject
+// with the damaged-save toast and never reach confirm(), every junky aux field repairs in place,
+// legal apostrophe names render as entities and execute nothing, and a valid save re-imports
+// through the real paste UI byte-identically (bst apart — it is a refilled cache).
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { execSync } from 'node:child_process';
@@ -67,7 +71,7 @@ function scanHTML(html) {
     const attrs = m[2], el = makeEl(m[1]);
     const idm = attrs.match(/\bid="([\w-]+)"/);
     const dm = attrs.match(/\bdata-([\w-]+)="([^"]*)"/);
-    if (dm) { el.dataset[dm[1]] = dm[2]; reg('[data-' + dm[1] + ']', el); }
+    if (dm) { el.dataset[dm[1]] = dm[2]; reg('[data-' + dm[1] + ']', el); Els.set('[data-' + dm[1] + '="' + dm[2] + '"]', [el]); } // value-specific key too: wireSave binds via querySelector('[data-save="import"]')
     if (idm) Els.set('#' + idm[1], [el]); // id selectors replace (innerHTML replaced the node)
     const vmAttr = attrs.match(/\bvalue="([^"]*)"/); // browser would decode entities when parsing
     if (vmAttr) el.value = vmAttr[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
@@ -403,6 +407,77 @@ A('leakfix_hard_megas_survive', ids16.filter((_, k) => k !== 2).every(id => X.ra
 exitMatch();
 sandbox.confirm = realConfirm;
 X.S.diff = 'normal';
+
+// ---------- POK-29 additions: import hardening (size cap, deep validation/repair, XSS escape) ----------
+navBtns.find(b => b.dataset.t === 'inv').onclick(); // renders saveSection + wireSave()
+A('import_ui_present', !!(Els.get('[data-save]') || []).find(b => b.dataset.save === 'import') && !!Els.get('#saveta') && !!Els.get('#savefile'), 'save UI wired');
+const env29 = st => JSON.stringify({ game: X.SAVE_GAME, v: X.SAVE_VERSION, saved: '2026-01-01T00:00:00.000Z', state: { caught: {}, ach: {}, gems: 1, wins: 0, ...st } });
+const toastReset = () => { X.toastQ.length = 0; if (sandbox.toast && sandbox.toast.t) { clearTimeout(sandbox.toast.t); sandbox.toast.t = null; } q('#toast').textContent = ''; q('#toast').style.display = 'none'; }; // kill the pending pump so the next toast shows synchronously
+const tryImport = txt => { toastReset(); navBtns.find(b => b.dataset.t === 'inv').onclick(); Els.get('#saveta')[0].value = txt; (Els.get('[data-save]') || []).find(b => b.dataset.save === 'import').onclick(); }; // re-enter inv so the wired save UI is fresh
+const damagedToast = () => q('#toast').textContent === 'That save is damaged or incomplete.';
+
+// (17) size: a 2 MB file is refused before FileReader runs; a normal-size file is still read
+let frCalls = 0; const realFR = sandbox.FileReader;
+sandbox.FileReader = class { readAsText() { frCalls++; } };
+const fi29 = Els.get('#savefile')[0];
+const sBefore17 = JSON.stringify(X.S);
+toastReset();
+fi29.files = [{ size: 2 * 1048576 }]; fi29.onchange();
+A('size_2mb_refused_before_read', frCalls === 0 && fi29.value === '' && q('#toast').textContent.includes('too large'), `fr=${frCalls} value='${fi29.value}' toast='${q('#toast').textContent}'`);
+A('size_reject_leaves_state_untouched', JSON.stringify(X.S) === sBefore17, 'state changed');
+fi29.files = [{ size: 100 }]; fi29.onchange();
+A('size_normal_file_still_read', frCalls === 1, 'fr=' + frCalls);
+sandbox.FileReader = realFR;
+
+// (18) reject: hostile names/types never reach confirm(); the damaged-save toast shows; state untouched
+let confirmCalls29 = 0; const realConfirm29 = sandbox.confirm; sandbox.confirm = () => { confirmCalls29++; return true; };
+const sBefore18 = JSON.stringify(X.S);
+tryImport(env29({ caught: { 25: { n: 'pikachu', t: 'fire' } } })); // the original crash repro: types as text
+A('reject_type_text_damaged_toast', confirmCalls29 === 0 && damagedToast(), `confirm=${confirmCalls29} toast='${q('#toast').textContent}'`);
+tryImport(env29({ caught: { 25: { n: '<img src=x onerror=window.__pwned=1>', t: ['fire'] } } }));
+A('reject_hostile_name_no_confirm', confirmCalls29 === 0 && damagedToast(), `confirm=${confirmCalls29} toast='${q('#toast').textContent}'`);
+tryImport(env29({ mgs: { 10033: { n: '<svg onload=window.__pwned=1>' } } }));
+A('reject_hostile_mega_name', confirmCalls29 === 0 && damagedToast(), `confirm=${confirmCalls29} toast='${q('#toast').textContent}'`);
+A('reject_state_untouched', JSON.stringify(X.S) === sBefore18, 'state changed');
+
+// (19) repair: a junky-but-legal save imports cleanly with every aux field coerced in place
+tryImport(env29({ caught: { 25: { n: 'pikachu', t: ['electric'], b: '320', bp: '5', sk: ['artwork', 'bogus', 7], rb: [1, 'gold', null] } }, ach: { a: 1, b: 'yes' }, gems: 42, wins: 7, pts: 45, skin: { 25: { s: 'artwork', sh: 1 }, 7: 'art' }, bst: { 25: 320, x: 'junk' }, items: { boost: '2', junk: 'nope' }, mgs: { 10033: { n: 'Mega Venusaur', sl: 'venusaur-mega', t: ['grass', 'poison'], b: '625' }, junk: { n: 'x' } }, mis: { done: 'x', prize: 9, act: [{ id: 'nope', p: 'zzz' }] } }));
+A('repair_import_accepted', confirmCalls29 === 1 && q('#toast').textContent.includes('Imported!'), `confirm=${confirmCalls29} toast='${q('#toast').textContent}'`);
+const c25 = X.S.caught[25];
+A('repair_b_bp_coerced_to_numbers', c25.b === 320 && c25.bp === 5 && typeof c25.bp == 'number', JSON.stringify({ b: c25.b, bp: c25.bp }));
+A('repair_sk_rb_filtered', JSON.stringify(c25.sk) === '["artwork"]' && JSON.stringify(c25.rb) === '["gold"]', JSON.stringify({ sk: c25.sk, rb: c25.rb }));
+A('repair_mgs_and_bst', X.S.mgs['10033'] && X.S.mgs['10033'].b === 625 && !X.S.mgs.junk && X.S.bst['25'] === 320, JSON.stringify({ mgs: Object.keys(X.S.mgs), b: X.S.mgs['10033'] && X.S.mgs['10033'].b, bst: X.S.bst['25'] }));
+A('repair_skin_junk_dropped', X.S.skin['25'] && X.S.skin['25'].s === 'artwork' && X.S.skin['25'].sh === 1 && !X.S.skin['7'], JSON.stringify(X.S.skin));
+A('repair_items_ach_coerced', X.S.items.boost === 2 && X.S.items.junk === 0 && X.S.ach.a === 1 && X.S.ach.b === 1, JSON.stringify({ items: X.S.items, ach: X.S.ach }));
+const m19 = X.S.mis;
+A('repair_mis_normalized', m19.done === 0 && m19.prize === 0 && Array.isArray(m19.act) && m19.act.length === 3 && m19.act.every(a => a && typeof a.id == 'string' && a.id != 'nope' && Number.isInteger(a.p) && a.p >= 0), JSON.stringify({ done: m19.done, prize: m19.prize, act: m19.act }));
+const sBeforePts = JSON.stringify(X.S);
+tryImport(env29({ caught: { 25: { n: 'pikachu', t: ['electric'] } }, pts: '3' })); // text pts feeds score math — rejected, not coerced
+A('repair_pts_text_rejected', confirmCalls29 === 1 && damagedToast() && JSON.stringify(X.S) === sBeforePts, `toast='${q('#toast').textContent}'`);
+
+// (20) escape: legal apostrophe names render as entities (visually identical), markup never executes
+const escOut = vm.runInContext('esc("<img src=x onerror=window.__pwned=1>")', sandbox);
+A('escape_unit_esc', escOut === '&lt;img src=x onerror=window.__pwned=1&gt;', escOut);
+tryImport(env29({ caught: { 83: { n: "Farfetch'd", t: ['normal', 'flying'], b: 352, sk: [] } }, gems: 9, wins: 1, lead: 83 }));
+A('escape_apostrophe_name_imports', q('#toast').textContent.includes('Imported!') && X.S.caught[83].n === "Farfetch'd", `toast='${q('#toast').textContent}'`);
+navBtns.find(b => b.dataset.t === 'dex').onclick();
+const dexHtml20 = q('#m').innerHTML; // cells are synthesized children — their escaped names live in the container html
+A('escape_cell_uses_entity', dexHtml20.includes('Farfetch&#39;d') && !dexHtml20.includes("Farfetch'd"), dexHtml20.slice(0, 160));
+const cell83 = (Els.get('.cell') || []).find(el => el.dataset.i === '83');
+cell83.onclick();
+const panel20 = q('#m').innerHTML;
+A('escape_panel_name_and_alt_escaped', panel20.includes('Farfetch&#39;d') && panel20.includes('alt="Farfetch&#39;d"') && !panel20.includes("Farfetch'd"), panel20.slice(0, 160));
+A('escape_no_handler_executed', sandbox.__pwned === undefined, 'pwned=' + sandbox.__pwned);
+
+// (21) round-trip: a valid save re-imports through the real UI byte-identically (bst is a refilled cache)
+const stripBst = s => { const o = JSON.parse(s); delete o.bst; return JSON.stringify(o); };
+const before21 = stripBst(JSON.stringify(X.S));
+tryImport(X.buildExportPayload(X.S).code);
+A('roundtrip_reimport_accepted', q('#toast').textContent.includes('Imported!') && X.S.caught[83] && X.S.caught[83].n === "Farfetch'd", `toast='${q('#toast').textContent}'`);
+A('roundtrip_byte_identical', stripBst(JSON.stringify(X.S)) === before21, 'state drift on re-import');
+A('escape_no_handler_executed_final', sandbox.__pwned === undefined, 'pwned=' + sandbox.__pwned);
+navBtns.find(b => b.dataset.t === 'battle').onclick();
+sandbox.confirm = realConfirm29;
 
 // ---------- report ----------
 console.log(out.join('\n'));
